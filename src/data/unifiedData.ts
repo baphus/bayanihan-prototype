@@ -20,7 +20,121 @@ export type MockAuthUser = {
   name: string
 }
 
-export const MOCK_AUTH_USERS: MockAuthUser[] = [
+const NAME_SUFFIXES = new Set(['JR', 'SR', 'II', 'III', 'IV', 'V'])
+
+type ParsedPersonName = {
+  firstName: string
+  middleInitial: string
+  surname: string
+  suffix: string
+}
+
+function normalizeToken(value: string): string {
+  return value.replace(/\./g, '').trim().toUpperCase()
+}
+
+function shouldFormatName(name: string): boolean {
+  if (name.includes(',')) {
+    return true
+  }
+
+  const tokens = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (tokens.length >= 3) {
+    return true
+  }
+
+  return tokens.some((token) => token.replace(/\./g, '').length === 1)
+}
+
+function parsePersonName(name: string): ParsedPersonName {
+  const normalized = name.trim().replace(/\s+/g, ' ')
+
+  if (!normalized) {
+    return { firstName: '', middleInitial: '', surname: '', suffix: '' }
+  }
+
+  if (normalized.includes(',')) {
+    const [rawSurname, rawGiven = '', rawSuffix = ''] = normalized.split(',').map((part) => part.trim())
+    const givenTokens = rawGiven.split(/\s+/).filter(Boolean)
+
+    const firstName = givenTokens[0] ?? ''
+    const middleToken = givenTokens.length > 1 ? givenTokens[givenTokens.length - 1] : ''
+    const middleInitial = middleToken ? middleToken.replace(/\./g, '').charAt(0).toUpperCase() : ''
+    const suffix = rawSuffix || ''
+
+    return {
+      firstName,
+      middleInitial,
+      surname: rawSurname,
+      suffix,
+    }
+  }
+
+  const tokens = normalized.split(/\s+/).filter(Boolean)
+
+  if (tokens.length === 1) {
+    return { firstName: tokens[0], middleInitial: '', surname: '', suffix: '' }
+  }
+
+  const lastToken = tokens[tokens.length - 1]
+  const maybeSuffix = normalizeToken(lastToken)
+  const hasSuffix = NAME_SUFFIXES.has(maybeSuffix)
+
+  const suffix = hasSuffix ? lastToken.replace(/\./g, '') : ''
+  const coreTokens = hasSuffix ? tokens.slice(0, -1) : tokens
+
+  if (coreTokens.length === 2) {
+    return {
+      firstName: coreTokens[0],
+      middleInitial: '',
+      surname: coreTokens[1],
+      suffix,
+    }
+  }
+
+  return {
+    firstName: coreTokens[0] ?? '',
+    middleInitial: coreTokens.length > 2 ? coreTokens[coreTokens.length - 2].replace(/\./g, '').charAt(0).toUpperCase() : '',
+    surname: coreTokens.length > 1 ? coreTokens[coreTokens.length - 1] : '',
+    suffix,
+  }
+}
+
+function composeFormattedName(parts: ParsedPersonName): string {
+  if (!parts.firstName && !parts.surname) {
+    return ''
+  }
+
+  const segments: string[] = [parts.firstName]
+
+  if (parts.middleInitial) {
+    segments.push(`${parts.middleInitial}.`)
+  }
+
+  if (parts.surname) {
+    segments.push(parts.surname)
+  }
+
+  if (parts.suffix) {
+    segments.push(parts.suffix)
+  }
+
+  return segments.join(' ')
+}
+
+export function formatPersonName(name: string): string {
+  if (!shouldFormatName(name)) {
+    return name
+  }
+
+  return composeFormattedName(parsePersonName(name)) || name
+}
+
+const MOCK_AUTH_USERS_RAW: MockAuthUser[] = [
   {
     email: 'admin@example.com',
     password: 'password123',
@@ -41,6 +155,11 @@ export const MOCK_AUTH_USERS: MockAuthUser[] = [
   },
 ]
 
+export const MOCK_AUTH_USERS: MockAuthUser[] = MOCK_AUTH_USERS_RAW.map((user) => ({
+  ...user,
+  name: formatPersonName(user.name),
+}))
+
 export type ReferralActor = {
   id: string
   name: string
@@ -59,7 +178,7 @@ export type SharedReferralCase = {
   updatedAt: string
 }
 
-export const REFERRAL_CASES: SharedReferralCase[] = [
+const REFERRAL_CASES_RAW: SharedReferralCase[] = [
   { id: 'MB-2024-8812', caseNo: 'OW-A7K2M9Q', clientName: 'Mariano, Ricardo J.', clientType: 'Overseas Filipino Worker', service: 'Repatriation Services', milestone: 'Verification', status: 'PENDING', createdAt: '2026-03-18T09:14:23', updatedAt: '2026-03-20T16:42:51' },
   { id: 'MB-2024-7751', caseNo: 'OW-P4T8X1L', clientName: 'Dela Cruz, Elena S.', clientType: 'Next of Kin', service: 'Legal Assistance', milestone: 'Case Intake', status: 'PROCESSING', createdAt: '2026-03-14T08:03:17', updatedAt: '2026-03-22T13:11:38' },
   { id: 'MB-2024-5521', caseNo: 'OW-Z9D3R6N', clientName: 'Panganiban, Arturo', clientType: 'Overseas Filipino Worker', service: 'Medical Assistance', milestone: 'Release of Aid', status: 'COMPLETED', createdAt: '2026-03-09T11:27:40', updatedAt: '2026-03-27T17:29:05' },
@@ -82,18 +201,23 @@ export const REFERRAL_CASES: SharedReferralCase[] = [
   { id: 'MB-2024-4425', caseNo: 'OW-P2X6G5N', clientName: 'De Leon, Patricia S.', clientType: 'Overseas Filipino Worker', service: 'Financial Relief', milestone: 'Assessment', status: 'PENDING', createdAt: '2026-04-01T09:26:05', updatedAt: '2026-04-01T13:11:58' },
 ]
 
+export const REFERRAL_CASES: SharedReferralCase[] = REFERRAL_CASES_RAW.map((item) => ({
+  ...item,
+  clientName: formatPersonName(item.clientName),
+}))
+
 export const REFERRAL_ACTORS = {
   system: { id: 'actor-system-001', name: 'System', role: 'System' as const },
   caseManagers: [
     { id: 'actor-cm-001', name: 'Marychris M. Relon', role: 'Case Manager' as const },
     { id: 'actor-cm-002', name: 'Anjelica R. Flores', role: 'Case Manager' as const },
     { id: 'actor-cm-003', name: 'Ramon T. Lim', role: 'Case Manager' as const },
-  ],
+  ].map((actor) => ({ ...actor, name: formatPersonName(actor.name) })),
   agencyFocals: [
     { id: 'actor-af-001', name: 'Josephus Kim L. Sarsonas', role: 'Agency Focal' as const },
     { id: 'actor-af-002', name: 'Frances M. Sevilla', role: 'Agency Focal' as const },
     { id: 'actor-af-003', name: 'Miguel A. Solis', role: 'Agency Focal' as const },
-  ],
+  ].map((actor) => ({ ...actor, name: formatPersonName(actor.name) })),
 }
 
 function computeStableIndex(value: string, modulo: number): number {
@@ -131,17 +255,206 @@ export function getReferralCaseByCaseNo(caseNo: string): SharedReferralCase | un
 
 export type SpecialCategory = 'Senior Citizen' | 'PWD' | 'Solo Parent'
 
+export type AddressParts = {
+  regionCode: string
+  regionName: string
+  provinceCode: string
+  provinceName: string
+  municipalityCode: string
+  municipalityName: string
+  barangayCode: string
+  barangayName: string
+  streetAddress: string
+}
+
+type AddressUnit = {
+  code: string
+  name: string
+}
+
+const MOCK_REGIONS: AddressUnit[] = [
+  { code: '1300000000', name: 'NCR' },
+  { code: '0400000000', name: 'Region IV-A (CALABARZON)' },
+  { code: '0700000000', name: 'Region VII (Central Visayas)' },
+  { code: '1100000000', name: 'Region XI (Davao Region)' },
+]
+
+const MOCK_PROVINCES_BY_REGION: Record<string, AddressUnit[]> = {
+  '1300000000': [],
+  '0400000000': [
+    { code: '0401000000', name: 'Batangas' },
+    { code: '0421000000', name: 'Cavite' },
+  ],
+  '0700000000': [
+    { code: '0722000000', name: 'Cebu' },
+    { code: '0712000000', name: 'Bohol' },
+  ],
+  '1100000000': [
+    { code: '1124000000', name: 'Davao del Sur' },
+    { code: '1123000000', name: 'Davao del Norte' },
+  ],
+}
+
+const MOCK_MUNICIPALITIES_BY_PARENT: Record<string, AddressUnit[]> = {
+  '1300000000': [
+    { code: '1339000000', name: 'Quezon City' },
+    { code: '1375000000', name: 'City of San Juan' },
+  ],
+  '0401000000': [
+    { code: '0410050000', name: 'Lipa City' },
+    { code: '0410280000', name: 'Tanauan City' },
+  ],
+  '0421000000': [
+    { code: '0421030000', name: 'Bacoor City' },
+    { code: '0421080000', name: 'Tagaytay City' },
+  ],
+  '0722000000': [
+    { code: '0722170000', name: 'Cebu City' },
+    { code: '0722300000', name: 'Mandaue City' },
+  ],
+  '0712000000': [
+    { code: '0712170000', name: 'Tagbilaran City' },
+    { code: '0712330000', name: 'Panglao' },
+  ],
+  '1124000000': [
+    { code: '1124020000', name: 'Davao City' },
+    { code: '1124030000', name: 'Digos City' },
+  ],
+  '1123000000': [
+    { code: '1123030000', name: 'Panabo City' },
+    { code: '1123110000', name: 'Tagum City' },
+  ],
+}
+
+const MOCK_BARANGAYS_BY_MUNICIPALITY: Record<string, AddressUnit[]> = {
+  '1339000000': [
+    { code: '133900011', name: 'Bagong Pag-asa' },
+    { code: '133900017', name: 'Batasan Hills' },
+  ],
+  '1375000000': [
+    { code: '137500004', name: 'Greenhills' },
+    { code: '137500010', name: 'Salapan' },
+  ],
+  '0410050000': [
+    { code: '041005009', name: 'Balintawak' },
+    { code: '041005018', name: 'Marawoy' },
+  ],
+  '0410280000': [
+    { code: '041028004', name: 'Banadero' },
+    { code: '041028023', name: 'Santor' },
+  ],
+  '0421030000': [
+    { code: '042103002', name: 'Alima' },
+    { code: '042103060', name: 'Mambog I' },
+  ],
+  '0421080000': [
+    { code: '042108013', name: 'Kaybagal North' },
+    { code: '042108014', name: 'Kaybagal South' },
+  ],
+  '0722170000': [
+    { code: '072217006', name: 'Capitol Site' },
+    { code: '072217062', name: 'Lahug' },
+  ],
+  '0722300000': [
+    { code: '072230015', name: 'Ibabao-Estancia' },
+    { code: '072230020', name: 'Looc' },
+  ],
+  '0712170000': [
+    { code: '071217014', name: 'Cogon' },
+    { code: '071217017', name: 'Dao' },
+  ],
+  '0712330000': [
+    { code: '071233006', name: 'Doljo' },
+    { code: '071233010', name: 'Poblacion' },
+  ],
+  '1124020000': [
+    { code: '112402049', name: 'Matina' },
+    { code: '112402027', name: 'Buhangin' },
+  ],
+  '1124030000': [
+    { code: '112403002', name: 'Aplaya' },
+    { code: '112403010', name: 'Poblacion' },
+  ],
+  '1123030000': [
+    { code: '112303007', name: 'Gredu' },
+    { code: '112303019', name: 'New Pandan' },
+  ],
+  '1123110000': [
+    { code: '112311006', name: 'Apokon' },
+    { code: '112311022', name: 'Mankilam' },
+  ],
+}
+
+export function createEmptyAddressParts(): AddressParts {
+  return {
+    regionCode: '',
+    regionName: '',
+    provinceCode: '',
+    provinceName: '',
+    municipalityCode: '',
+    municipalityName: '',
+    barangayCode: '',
+    barangayName: '',
+    streetAddress: '',
+  }
+}
+
+export function formatAddressParts(address: AddressParts | null | undefined): string {
+  if (!address) {
+    return '-'
+  }
+
+  const chunks = [
+    address.streetAddress,
+    address.barangayName,
+    address.municipalityName,
+    address.provinceName,
+    address.regionName,
+  ]
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+
+  return chunks.length > 0 ? chunks.join(', ') : '-'
+}
+
+function pickAddressUnit(seed: number, list: AddressUnit[]): AddressUnit {
+  return list[seed % list.length]
+}
+
+function buildMockAddressParts(seed: number): AddressParts {
+  const region = pickAddressUnit(seed, MOCK_REGIONS)
+  const provinces = MOCK_PROVINCES_BY_REGION[region.code] ?? []
+  const province = provinces.length > 0 ? pickAddressUnit(seed + 3, provinces) : { code: '', name: '' }
+  const municipalityParentCode = province.code || region.code
+  const municipalities = MOCK_MUNICIPALITIES_BY_PARENT[municipalityParentCode] ?? []
+  const municipality = municipalities.length > 0 ? pickAddressUnit(seed + 5, municipalities) : { code: '', name: '' }
+  const barangays = MOCK_BARANGAYS_BY_MUNICIPALITY[municipality.code] ?? []
+  const barangay = barangays.length > 0 ? pickAddressUnit(seed + 7, barangays) : { code: '', name: '' }
+
+  return {
+    regionCode: region.code,
+    regionName: region.name,
+    provinceCode: province.code,
+    provinceName: province.name,
+    municipalityCode: municipality.code,
+    municipalityName: municipality.name,
+    barangayCode: barangay.code,
+    barangayName: barangay.name,
+    streetAddress: `Blk ${(seed % 30) + 1}, Lot ${(seed % 50) + 1}`,
+  }
+}
+
 export type ClientPersona = {
   ofwName: string
   ofwBirth: string
   gender: string
   ofwEmail: string
   ofwContact: string
-  ofwAddress: string
+  ofwAddress: AddressParts
   kinName: string
   kinContact: string
   kinEmail: string
-  kinAddress: string
+  kinAddress: AddressParts
   lastCountry: string
   lastJob: string
   arrivalDate: string
@@ -153,7 +466,7 @@ export type ExistingClientProfile = {
   gender: string
   email: string
   contact: string
-  address: string
+  address: AddressParts
   lastCountry: string
   lastJob: string
   arrivalDate: string
@@ -161,7 +474,7 @@ export type ExistingClientProfile = {
   kinName: string
   kinContact: string
   kinEmail: string
-  kinAddress: string
+  kinAddress: AddressParts
 }
 
 export function stableSeed(value: string): number {
@@ -211,46 +524,56 @@ export function getCaseClosureRemarkBySeed(seed: string): string {
 
 export function getClientPersona(seed: string): ClientPersona {
   const firstNames = ['Miguel', 'Elaine', 'Carlos', 'Anita', 'Ramon', 'Liza', 'Teresa', 'Joel']
-  const middleNames = ['Santos', 'Delos', 'Garcia', 'Mendoza', 'Rivera', 'Castillo']
   const lastNames = ['Rodriguez', 'Bautista', 'Lopez', 'Villanueva', 'Torres', 'Aquino']
   const countries = ['Saudi Arabia', 'Qatar', 'UAE', 'Kuwait']
   const jobs = ['Construction Supervisor', 'Caregiver', 'Machine Operator', 'Domestic Worker']
 
   const sum = stableSeed(seed)
   const firstName = firstNames[sum % firstNames.length]
-  const middleName = middleNames[sum % middleNames.length]
   const lastName = lastNames[sum % lastNames.length]
 
   const firstNameKin = firstNames[(sum + 2) % firstNames.length]
-  const middleNameKin = middleNames[(sum + 3) % middleNames.length]
   const lastNameKin = lastNames[(sum + 1) % lastNames.length]
+  const ofwAddressParts = buildMockAddressParts(sum)
+  const kinAddressParts = buildMockAddressParts(sum + 11)
 
   return {
-    ofwName: `${firstName} ${middleName} R. ${lastName}`,
+    ofwName: composeFormattedName({ firstName, middleInitial: 'R', surname: lastName, suffix: '' }),
     ofwBirth: `May ${(sum % 28) + 1}, ${1988 + (sum % 10)} (${28 + (sum % 12)} yrs)`,
     gender: sum % 2 === 0 ? 'Male' : 'Female',
     ofwEmail: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@email.ph`,
     ofwContact: `+63 917 ${(100 + (sum % 900)).toString().padStart(3, '0')} ${(1000 + (sum % 9000)).toString().padStart(4, '0')}`,
-    ofwAddress: `Blk ${(sum % 30) + 1}, Lot ${(sum % 50) + 1}, Greenview Subd., Brgy. San Jose, Quezon City`,
-    kinName: `${firstNameKin} ${middleNameKin} B. ${lastNameKin}`,
+    ofwAddress: ofwAddressParts,
+    kinName: composeFormattedName({ firstName: firstNameKin, middleInitial: 'B', surname: lastNameKin, suffix: '' }),
     kinContact: `+63 917 ${(200 + (sum % 700)).toString().padStart(3, '0')} ${(1000 + ((sum + 33) % 9000)).toString().padStart(4, '0')}`,
     kinEmail: `${firstNameKin.toLowerCase()}.${lastNameKin.toLowerCase()}@email.ph`,
-    kinAddress: `Blk ${(sum % 30) + 1}, Lot ${(sum % 50) + 1}, Greenview Subd., Brgy. San Jose, Quezon City`,
+    kinAddress: kinAddressParts,
     lastCountry: countries[sum % countries.length],
     lastJob: jobs[sum % jobs.length],
     arrivalDate: `Oct ${(sum % 28) + 1}, 2023`,
   }
 }
 
-export function getNextOfKinForClient(clientName: string): { name: string; contact: string; email: string; address: string } {
+export function getNextOfKinForClient(clientName: string): { name: string; contact: string; email: string; address: AddressParts } {
   const seed = stableSeed(clientName)
-  const firstName = clientName.split(',')[0].trim() || clientName
+  const parsedClient = parsePersonName(clientName)
+  const surname = parsedClient.surname || 'Dela Cruz'
+  const kinFirstNames = ['Maria', 'Jose', 'Ana', 'Paolo', 'Liza', 'Marco']
+  const kinMiddleInitials = ['S', 'R', 'L', 'M', 'D', 'P']
+  const kinFirstName = kinFirstNames[seed % kinFirstNames.length]
+  const kinMiddleInitial = kinMiddleInitials[seed % kinMiddleInitials.length]
+  const formattedKinName = composeFormattedName({
+    firstName: kinFirstName,
+    middleInitial: kinMiddleInitial,
+    surname,
+    suffix: '',
+  })
 
   return {
-    name: `Relative of ${firstName}`,
+    name: formattedKinName,
     contact: `+63 917 ${(200 + (seed % 700)).toString().padStart(3, '0')} ${(1000 + ((seed + 33) % 9000)).toString().padStart(4, '0')}`,
-    email: `kin.${firstName.toLowerCase().replace(/\s+/g, '.')}@email.ph`,
-    address: `Blk ${(seed % 30) + 1}, Lot ${(seed % 50) + 1}, Greenview Subd., Brgy. San Jose, Quezon City`,
+    email: `kin.${kinFirstName.toLowerCase()}.${surname.toLowerCase().replace(/\s+/g, '.')}@email.ph`,
+    address: buildMockAddressParts(seed + 13),
   }
 }
 
@@ -258,16 +581,17 @@ export function getExistingClientProfile(clientName: string): ExistingClientProf
   const seed = stableSeed(clientName)
   const countries = ['Saudi Arabia', 'Qatar', 'UAE', 'Kuwait']
   const jobs = ['Construction Supervisor', 'Caregiver', 'Machine Operator', 'Domestic Worker']
-  const firstName = clientName.split(',')[0].trim() || clientName
+  const parsedClient = parsePersonName(clientName)
+  const firstName = parsedClient.firstName || clientName
   const kin = getNextOfKinForClient(clientName)
 
   return {
-    fullName: clientName,
+    fullName: formatPersonName(clientName),
     birthDate: `May ${(seed % 28) + 1}, ${1988 + (seed % 10)}`,
     gender: seed % 2 === 0 ? 'Male' : 'Female',
     email: `${firstName.toLowerCase().replace(/\s+/g, '.')}.${(seed % 90) + 10}@email.ph`,
     contact: `+63 917 ${(100 + (seed % 900)).toString().padStart(3, '0')} ${(1000 + (seed % 9000)).toString().padStart(4, '0')}`,
-    address: `Blk ${(seed % 30) + 1}, Lot ${(seed % 50) + 1}, Greenview Subd., Brgy. San Jose, Quezon City`,
+    address: buildMockAddressParts(seed),
     lastCountry: countries[seed % countries.length],
     lastJob: jobs[seed % jobs.length],
     arrivalDate: `Oct ${(seed % 28) + 1}, 2023`,
@@ -283,21 +607,22 @@ export function getClientDirectoryProfile(clientName: string): {
   ofwName: string
   ofwEmail: string
   ofwContact: string
-  ofwAddress: string
+  ofwAddress: AddressParts
   nextOfKinName: string
   nextOfKinContact: string
   nextOfKinEmail: string
-  nextOfKinAddress: string
+  nextOfKinAddress: AddressParts
 } {
   const seed = stableSeed(clientName)
-  const firstName = clientName.split(',')[0].trim() || clientName
+  const parsedClient = parsePersonName(clientName)
+  const firstName = parsedClient.firstName || clientName
   const kin = getNextOfKinForClient(clientName)
 
   return {
-    ofwName: clientName,
+    ofwName: formatPersonName(clientName),
     ofwEmail: `${firstName.toLowerCase().replace(/\s+/g, '.')}@email.ph`,
     ofwContact: `+63 917 ${(100 + (seed % 900)).toString().padStart(3, '0')} ${(1000 + (seed % 9000)).toString().padStart(4, '0')}`,
-    ofwAddress: `Blk ${(seed % 30) + 1}, Lot ${(seed % 50) + 1}, Greenview Subd., Brgy. San Jose, Quezon City`,
+    ofwAddress: buildMockAddressParts(seed),
     nextOfKinName: kin.name,
     nextOfKinContact: kin.contact,
     nextOfKinEmail: kin.email,
@@ -461,11 +786,6 @@ function getStatusRemarks(status: ReferralStatus): string {
   return 'Requirements are incomplete and need resubmission.'
 }
 
-function toSyntheticIpAddress(seed: string): string {
-  const value = stableSeed(seed)
-  return `${(value % 223) + 1}.${(value * 3) % 255}.${(value * 5) % 255}.${(value * 7) % 255}`
-}
-
 function toRecipientEmail(clientName: string): string {
   const normalized = clientName
     .toLowerCase()
@@ -529,9 +849,8 @@ export function buildAgencyActivityLogs(): OversightActivityLog[] {
 }
 
 export function buildCaseManagerOversightActivityLogs(): OversightActivityLog[] {
-  const caseLogs = CASE_MANAGER_CASES.flatMap((item) => {
+  return CASE_MANAGER_CASES.flatMap((item) => {
     const actors = getReferralActorsForCase(item.id)
-    const receivingAgency = getCaseAgency(item.id)
 
     const assignedLog: OversightActivityLog = {
       id: `cm-${item.id}-assigned`,
@@ -572,22 +891,6 @@ export function buildCaseManagerOversightActivityLogs(): OversightActivityLog[] 
       details: `Referral sent to ${item.agencyName}.`,
     }
 
-    const emailLog: OversightActivityLog = {
-      id: `cm-${item.id}-email`,
-      caseNo: item.caseNo,
-      clientName: item.clientName,
-      recordId: item.caseNo,
-      entity: 'referrals',
-      activityType: 'EMAIL_SENT',
-      actor: actors.caseManager.name,
-      actorRole: actors.caseManager.role,
-      channel: 'Portal',
-      status: 'COMPLETED',
-      timestamp: addMinutesToIso(item.createdAt, 50),
-      details: `Referral endorsement email sent to ${item.agencyName}.`,
-      emailRecipient: receivingAgency.email,
-    }
-
     const milestoneLog: OversightActivityLog = {
       id: `cm-${item.id}-milestone`,
       caseNo: item.caseNo,
@@ -602,7 +905,7 @@ export function buildCaseManagerOversightActivityLogs(): OversightActivityLog[] 
     }
 
     if (item.status === 'PENDING') {
-      return [assignedLog, createdLog, sentLog, emailLog]
+      return [assignedLog, createdLog, sentLog]
     }
 
     const statusLog: OversightActivityLog = {
@@ -619,125 +922,32 @@ export function buildCaseManagerOversightActivityLogs(): OversightActivityLog[] 
       remarks: getStatusRemarks(item.status),
     }
 
-    return [assignedLog, createdLog, sentLog, emailLog, milestoneLog, statusLog]
-  })
-
-  const loginLogs = REFERRAL_ACTORS.caseManagers.flatMap((manager, index) => {
-    const baseTimestamp = addMinutesToIso('2026-04-10T08:00:00.000Z', index * 45)
-    const ipAddress = toSyntheticIpAddress(manager.id)
-
-    const attemptLog: OversightActivityLog = {
-      id: `cm-login-attempt-${manager.id}`,
-      activityType: 'LOGIN_ATTEMPT',
-      actor: manager.name,
-      actorRole: manager.role,
-      channel: 'Portal',
-      status: 'COMPLETED',
-      timestamp: baseTimestamp,
-      details: 'Case Manager login attempt succeeded after MFA validation.',
-      ipAddress,
-    }
-
-    const loginLog: OversightActivityLog = {
-      id: `cm-login-${manager.id}`,
-      activityType: 'USER_LOGIN',
-      actor: manager.name,
-      actorRole: manager.role,
-      channel: 'Portal',
-      status: 'COMPLETED',
-      timestamp: addMinutesToIso(baseTimestamp, 1),
-      details: 'Case Manager session established in the portal.',
-      ipAddress,
-    }
-
-    return [attemptLog, loginLog]
-  })
-
-  return [...caseLogs, ...loginLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    return [assignedLog, createdLog, sentLog, milestoneLog, statusLog]
+  }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 }
 
 export function buildSystemAdminOversightActivityLogs(): OversightActivityLog[] {
   const entitySources: SystemAdminEntity[] = ['cases', 'clients', 'agencies', 'services', 'referrals', 'users']
 
   const entityLogs = entitySources.flatMap((entity) => {
-    return getSystemAdminRows(entity).flatMap((row) => {
+    return getSystemAdminRows(entity).map((row) => {
       const isUser = entity === 'users'
 
-      if (isUser) {
-        const ipAddress = toSyntheticIpAddress(row.id)
-        const isSuccessfulAttempt = stableSeed(row.id) % 4 !== 0
-
-        const attemptLog: OversightActivityLog = {
-          id: `sa-${entity}-${row.id}-attempt`,
-          recordId: row.recordId,
-          entity,
-          activityType: 'LOGIN_ATTEMPT',
-          actor: row.recordLabel,
-          actorRole: 'User',
-          channel: 'Portal',
-          status: isSuccessfulAttempt ? 'COMPLETED' : 'REJECTED',
-          timestamp: addMinutesToIso(row.updatedAt, -20),
-          details: isSuccessfulAttempt
-            ? 'Login attempt succeeded after credential verification.'
-            : 'Login attempt failed due to invalid credentials.',
-          ipAddress,
-        }
-
-        if (!isSuccessfulAttempt) {
-          return [attemptLog]
-        }
-
-        const loginLog: OversightActivityLog = {
-          id: `sa-${entity}-${row.id}`,
-          recordId: row.recordId,
-          entity,
-          activityType: 'USER_LOGIN',
-          actor: row.recordLabel,
-          actorRole: 'User',
-          channel: 'Portal',
-          status: 'COMPLETED',
-          timestamp: row.updatedAt,
-          details: 'User successfully authenticated into the portal.',
-          ipAddress,
-        }
-
-        return [attemptLog, loginLog]
-      }
-
-      const createdLog: OversightActivityLog = {
-        id: `sa-${entity}-${row.id}-created`,
-        caseNo: entity === 'cases' ? row.recordId : undefined,
-        clientName: entity === 'cases' || entity === 'clients' ? row.recordLabel : undefined,
-        recordId: row.recordId,
-        entity,
-        activityType: 'RECORD_CREATED',
-        actor: 'System Admin',
-        actorRole: 'System Admin',
-        channel: 'Portal',
-        status: 'PENDING',
-        timestamp: addMinutesToIso(row.updatedAt, -45),
-        details: `Created ${entity.slice(0, -1)} record in ${row.scope} scope.`,
-      }
-
-      const updatedLog: OversightActivityLog = {
+      return {
         id: `sa-${entity}-${row.id}`,
         caseNo: entity === 'cases' ? row.recordId : undefined,
         clientName: entity === 'cases' || entity === 'clients' ? row.recordLabel : undefined,
         recordId: row.recordId,
         entity,
-        activityType: row.status === 'ARCHIVED' ? 'STATUS_CHANGED' : 'RECORD_UPDATED',
-        actor: 'System Admin',
-        actorRole: 'System Admin',
+        activityType: isUser ? 'USER_LOGIN' : row.status === 'ARCHIVED' ? 'STATUS_CHANGED' : 'RECORD_UPDATED',
+        actor: isUser ? row.recordLabel : 'System Admin',
+        actorRole: isUser ? 'User' : 'System Admin',
         channel: 'Portal',
-        status: row.status === 'ARCHIVED' ? 'REJECTED' : 'PROCESSING',
         timestamp: row.updatedAt,
-        details:
-          row.status === 'ARCHIVED'
-            ? `Archived ${entity.slice(0, -1)} record in ${row.scope} scope.`
-            : `Updated ${entity.slice(0, -1)} record in ${row.scope} scope.`,
-      }
-
-      return [createdLog, updatedLog]
+        details: isUser
+          ? 'User successfully authenticated into the portal.'
+          : `Updated ${entity.slice(0, -1)} record in ${row.scope} scope.`,
+      } as OversightActivityLog
     })
   })
 
@@ -793,47 +1003,7 @@ export function buildSystemAdminOversightActivityLogs(): OversightActivityLog[] 
     return [assignedLog, sentLog, statusLog]
   })
 
-  const emailLogs = CASE_MANAGER_CASES.flatMap((item) => {
-    const agency = getCaseAgency(item.id)
-
-    const clientEmailLog: OversightActivityLog = {
-      id: `sa-${item.id}-email-client`,
-      caseNo: item.caseNo,
-      clientName: item.clientName,
-      recordId: item.caseNo,
-      entity: 'referrals',
-      activityType: 'EMAIL_SENT',
-      actor: 'System',
-      actorRole: 'System',
-      channel: 'Portal',
-      status: 'COMPLETED',
-      timestamp: addMinutesToIso(item.updatedAt, -10),
-      details: 'Case status update email sent to beneficiary.',
-      emailRecipient: toRecipientEmail(item.clientName),
-    }
-
-    const agencyEmailLog: OversightActivityLog = {
-      id: `sa-${item.id}-email-agency`,
-      caseNo: item.caseNo,
-      clientName: item.clientName,
-      recordId: item.caseNo,
-      entity: 'referrals',
-      activityType: 'EMAIL_SENT',
-      actor: 'Case Manager',
-      actorRole: 'Case Manager',
-      channel: 'Portal',
-      status: 'COMPLETED',
-      timestamp: addMinutesToIso(item.updatedAt, -5),
-      details: `Referral coordination email sent to ${agency.name}.`,
-      emailRecipient: agency.email,
-    }
-
-    return [clientEmailLog, agencyEmailLog]
-  })
-
-  return [...entityLogs, ...lifecycleLogs, ...emailLogs].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-  )
+  return [...entityLogs, ...lifecycleLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 }
 
 export function toCaseHealthStatus(status: ReferralStatus): 'OPEN' | 'CLOSED' {
@@ -1083,6 +1253,435 @@ export function getSystemAdminOverviewCards(): Array<{
   })
 }
 
+export type AdminLogLevel = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL'
+export type AdminLogModuleKey =
+  | 'authentication'
+  | 'referrals'
+  | 'caseUpdates'
+  | 'notifications'
+  | 'integrations'
+  | 'security'
+
+export type AuditRetentionPolicy = 'DELETE' | 'ARCHIVE'
+
+export type SystemAdminAuditSettings = {
+  modules: Record<AdminLogModuleKey, boolean>
+  level: AdminLogLevel
+  retentionDays: number
+  retentionPolicy: AuditRetentionPolicy
+}
+
+export type IntegrationConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'UNKNOWN'
+export type IntegrationProviderType = 'Supabase' | 'SMTP' | 'SendGrid'
+
+export type IntegrationServiceSettings = {
+  enabled: boolean
+  provider: IntegrationProviderType
+  endpointLabel: string
+  endpointValue: string
+  hasApiKey: boolean
+  apiKeyMasked: string
+  connectionStatus: IntegrationConnectionStatus
+  lastTestedAt?: string
+}
+
+export type SystemAdminStorageSettings = {
+  uploadLimitMb: number
+  allowedFileTypes: string[]
+  buckets: {
+    attachments: string
+    reports: string
+  }
+}
+
+export type SystemAdminIntegrationSettings = {
+  supabase: IntegrationServiceSettings
+  email: IntegrationServiceSettings
+  storage: SystemAdminStorageSettings
+}
+
+export type NotificationTriggerKey =
+  | 'CASE_REGISTERED'
+  | 'REFERRAL_ACCEPTED'
+  | 'REFERRAL_REJECTED'
+  | 'REFERRAL_COMPLETED'
+  | 'MILESTONE_UPDATED'
+
+export type NotificationTemplate = {
+  subject: string
+  body: string
+}
+
+export type NotificationTriggerConfig = {
+  enabled: boolean
+  template: NotificationTemplate
+}
+
+export type NotificationDeliveryStatus = 'SENT' | 'FAILED' | 'QUEUED'
+
+export type NotificationDeliveryLog = {
+  id: string
+  timestamp: string
+  trigger: NotificationTriggerKey
+  recipient: string
+  status: NotificationDeliveryStatus
+  message: string
+}
+
+export type SystemAdminNotificationSettings = {
+  triggers: Record<NotificationTriggerKey, NotificationTriggerConfig>
+}
+
+export type PasswordPolicy = {
+  minLength: number
+  requireUppercase: boolean
+  requireLowercase: boolean
+  requireNumber: boolean
+  requireSpecial: boolean
+  expirationDays: number
+}
+
+export type LockoutPolicy = {
+  maxFailedAttempts: number
+  lockoutDurationMinutes: number
+}
+
+export type RateLimitPolicy = {
+  perUserPerMinute: number
+  perIpPerMinute: number
+}
+
+export type SessionPolicy = {
+  timeoutMinutes: number
+  forceLogoutEnabled: boolean
+}
+
+export type IpRestrictionPolicy = {
+  enabled: boolean
+  mode: 'ALLOW' | 'BLOCK'
+  ranges: string[]
+}
+
+export type OtpPolicy = {
+  enabled: boolean
+  channel: 'EMAIL' | 'SMS' | 'AUTH_APP'
+  codeLength: number
+  expiryMinutes: number
+  maxAttempts: number
+}
+
+export type MfaPolicy = {
+  enabled: boolean
+  requiredRoles: Array<'System Admin' | 'Case Manager' | 'Agency'>
+  trustedDeviceDays: number
+  enforceOnRiskySignIn: boolean
+}
+
+export type SystemAdminSecuritySettings = {
+  password: PasswordPolicy
+  lockout: LockoutPolicy
+  rateLimit: RateLimitPolicy
+  session: SessionPolicy
+  ipRestrictions: IpRestrictionPolicy
+  otp: OtpPolicy
+  mfa: MfaPolicy
+}
+
+export type BackupFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY'
+
+export type BackupSettings = {
+  enabled: boolean
+  frequency: BackupFrequency
+  runAt: string
+  lastBackupAt: string
+}
+
+export type PerformanceSettings = {
+  defaultRowsPerPage: number
+  cacheEnabled: boolean
+}
+
+export type SystemAdminPlatformSettings = {
+  systemName: string
+  brandingLogoUrl: string
+  timezone: string
+  locale: string
+  softDeleteDays: number
+  backup: BackupSettings
+  performance: PerformanceSettings
+}
+
+export type SystemAdminGovernanceHealth = {
+  loggingEnabledModules: number
+  activeIntegrations: number
+  failedNotifications: number
+  strictPasswordPolicy: boolean
+  backupEnabled: boolean
+}
+
+function cloneData<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+let SYSTEM_ADMIN_AUDIT_SETTINGS: SystemAdminAuditSettings = {
+  modules: {
+    authentication: true,
+    referrals: true,
+    caseUpdates: true,
+    notifications: true,
+    integrations: false,
+    security: true,
+  },
+  level: 'WARNING',
+  retentionDays: 90,
+  retentionPolicy: 'ARCHIVE',
+}
+
+let SYSTEM_ADMIN_INTEGRATION_SETTINGS: SystemAdminIntegrationSettings = {
+  supabase: {
+    enabled: true,
+    provider: 'Supabase',
+    endpointLabel: 'Project URL',
+    endpointValue: 'https://bayanihan.supabase.co',
+    hasApiKey: true,
+    apiKeyMasked: 'sbp_************************2F9A',
+    connectionStatus: 'CONNECTED',
+    lastTestedAt: '2026-04-14T10:15:00',
+  },
+  email: {
+    enabled: true,
+    provider: 'SendGrid',
+    endpointLabel: 'Sender',
+    endpointValue: 'noreply@bayanihan.gov.ph',
+    hasApiKey: true,
+    apiKeyMasked: 'sg_************************7K1Q',
+    connectionStatus: 'CONNECTED',
+    lastTestedAt: '2026-04-14T10:18:00',
+  },
+  storage: {
+    uploadLimitMb: 10,
+    allowedFileTypes: ['pdf', 'jpg', 'jpeg', 'png', 'docx', 'zip'],
+    buckets: {
+      attachments: 'case-attachments',
+      reports: 'system-reports',
+    },
+  },
+}
+
+let SYSTEM_ADMIN_NOTIFICATION_SETTINGS: SystemAdminNotificationSettings = {
+  triggers: {
+    CASE_REGISTERED: {
+      enabled: true,
+      template: {
+        subject: 'Your case {{case_id}} is now registered',
+        body: 'Hello {{client_name}}, your case {{case_id}} has been registered and queued for review.',
+      },
+    },
+    REFERRAL_ACCEPTED: {
+      enabled: true,
+      template: {
+        subject: 'Referral accepted for case {{case_id}}',
+        body: 'The referral for {{client_name}} under case {{case_id}} has been accepted by the agency.',
+      },
+    },
+    REFERRAL_REJECTED: {
+      enabled: true,
+      template: {
+        subject: 'Referral update: action needed for {{case_id}}',
+        body: 'The referral for {{client_name}} under case {{case_id}} was rejected. Please review remarks and resubmit.',
+      },
+    },
+    REFERRAL_COMPLETED: {
+      enabled: true,
+      template: {
+        subject: 'Referral completed for case {{case_id}}',
+        body: 'Good news. The referral workflow for {{client_name}} in case {{case_id}} is now completed.',
+      },
+    },
+    MILESTONE_UPDATED: {
+      enabled: false,
+      template: {
+        subject: 'Milestone updated for {{case_id}}',
+        body: 'A new milestone has been posted for {{client_name}} under case {{case_id}}.',
+      },
+    },
+  },
+}
+
+let SYSTEM_ADMIN_NOTIFICATION_LOGS: NotificationDeliveryLog[] = CASE_MANAGER_CASES.slice(0, 20).map((item, index) => ({
+  id: `notif-${item.id}`,
+  timestamp: addMinutesToIso(item.updatedAt, index),
+  trigger: index % 4 === 0
+    ? 'REFERRAL_COMPLETED'
+    : index % 3 === 0
+      ? 'REFERRAL_REJECTED'
+      : index % 2 === 0
+        ? 'REFERRAL_ACCEPTED'
+        : 'CASE_REGISTERED',
+  recipient: toRecipientEmail(item.clientName),
+  status: index % 7 === 0 ? 'FAILED' : index % 5 === 0 ? 'QUEUED' : 'SENT',
+  message:
+    index % 7 === 0
+      ? 'SMTP timeout during delivery retry window.'
+      : index % 5 === 0
+        ? 'Queued for deferred delivery.'
+        : 'Notification dispatched successfully.',
+}))
+
+let SYSTEM_ADMIN_SECURITY_SETTINGS: SystemAdminSecuritySettings = {
+  password: {
+    minLength: 12,
+    requireUppercase: true,
+    requireLowercase: true,
+    requireNumber: true,
+    requireSpecial: true,
+    expirationDays: 90,
+  },
+  lockout: {
+    maxFailedAttempts: 5,
+    lockoutDurationMinutes: 30,
+  },
+  rateLimit: {
+    perUserPerMinute: 120,
+    perIpPerMinute: 300,
+  },
+  session: {
+    timeoutMinutes: 30,
+    forceLogoutEnabled: false,
+  },
+  ipRestrictions: {
+    enabled: false,
+    mode: 'ALLOW',
+    ranges: ['192.168.0.0/24'],
+  },
+  otp: {
+    enabled: true,
+    channel: 'EMAIL',
+    codeLength: 6,
+    expiryMinutes: 5,
+    maxAttempts: 3,
+  },
+  mfa: {
+    enabled: true,
+    requiredRoles: ['System Admin'],
+    trustedDeviceDays: 14,
+    enforceOnRiskySignIn: true,
+  },
+}
+
+let SYSTEM_ADMIN_PLATFORM_SETTINGS: SystemAdminPlatformSettings = {
+  systemName: 'Bayanihan One Window Referral and Tracking System',
+  brandingLogoUrl: '/logo.png',
+  timezone: 'Asia/Manila',
+  locale: 'en-PH',
+  softDeleteDays: 31,
+  backup: {
+    enabled: true,
+    frequency: 'WEEKLY',
+    runAt: '02:00',
+    lastBackupAt: '2026-04-13T02:00:00',
+  },
+  performance: {
+    defaultRowsPerPage: 10,
+    cacheEnabled: true,
+  },
+}
+
+export function getSystemAdminAuditSettings(): SystemAdminAuditSettings {
+  return cloneData(SYSTEM_ADMIN_AUDIT_SETTINGS)
+}
+
+export function updateSystemAdminAuditSettings(next: SystemAdminAuditSettings): void {
+  SYSTEM_ADMIN_AUDIT_SETTINGS = cloneData(next)
+}
+
+export function getSystemAdminIntegrationSettings(): SystemAdminIntegrationSettings {
+  return cloneData(SYSTEM_ADMIN_INTEGRATION_SETTINGS)
+}
+
+export function updateSystemAdminIntegrationSettings(next: SystemAdminIntegrationSettings): void {
+  SYSTEM_ADMIN_INTEGRATION_SETTINGS = cloneData(next)
+}
+
+export function testSystemAdminIntegrationConnection(service: 'supabase' | 'email'): IntegrationConnectionStatus {
+  const testedAt = new Date().toISOString()
+  const target = SYSTEM_ADMIN_INTEGRATION_SETTINGS[service]
+  const connectionStatus: IntegrationConnectionStatus = target.enabled && target.hasApiKey ? 'CONNECTED' : 'DISCONNECTED'
+
+  SYSTEM_ADMIN_INTEGRATION_SETTINGS = {
+    ...SYSTEM_ADMIN_INTEGRATION_SETTINGS,
+    [service]: {
+      ...target,
+      connectionStatus,
+      lastTestedAt: testedAt,
+    },
+  }
+
+  return connectionStatus
+}
+
+export function getSystemAdminNotificationSettings(): SystemAdminNotificationSettings {
+  return cloneData(SYSTEM_ADMIN_NOTIFICATION_SETTINGS)
+}
+
+export function updateSystemAdminNotificationSettings(next: SystemAdminNotificationSettings): void {
+  SYSTEM_ADMIN_NOTIFICATION_SETTINGS = cloneData(next)
+}
+
+export function getSystemAdminNotificationDeliveryLogs(): NotificationDeliveryLog[] {
+  return cloneData(SYSTEM_ADMIN_NOTIFICATION_LOGS)
+}
+
+export function addSystemAdminNotificationDeliveryLog(log: Omit<NotificationDeliveryLog, 'id'>): void {
+  SYSTEM_ADMIN_NOTIFICATION_LOGS = [
+    {
+      ...log,
+      id: `notif-manual-${Date.now()}`,
+    },
+    ...SYSTEM_ADMIN_NOTIFICATION_LOGS,
+  ]
+}
+
+export function getSystemAdminSecuritySettings(): SystemAdminSecuritySettings {
+  return cloneData(SYSTEM_ADMIN_SECURITY_SETTINGS)
+}
+
+export function updateSystemAdminSecuritySettings(next: SystemAdminSecuritySettings): void {
+  SYSTEM_ADMIN_SECURITY_SETTINGS = cloneData(next)
+}
+
+export function getSystemAdminPlatformSettings(): SystemAdminPlatformSettings {
+  return cloneData(SYSTEM_ADMIN_PLATFORM_SETTINGS)
+}
+
+export function updateSystemAdminPlatformSettings(next: SystemAdminPlatformSettings): void {
+  SYSTEM_ADMIN_PLATFORM_SETTINGS = cloneData(next)
+}
+
+export function getSystemAdminGovernanceHealth(): SystemAdminGovernanceHealth {
+  const loggingEnabledModules = Object.values(SYSTEM_ADMIN_AUDIT_SETTINGS.modules).filter(Boolean).length
+  const activeIntegrations = [
+    SYSTEM_ADMIN_INTEGRATION_SETTINGS.supabase,
+    SYSTEM_ADMIN_INTEGRATION_SETTINGS.email,
+  ].filter((item) => item.enabled && item.connectionStatus === 'CONNECTED').length
+
+  const failedNotifications = SYSTEM_ADMIN_NOTIFICATION_LOGS.filter((item) => item.status === 'FAILED').length
+  const strictPasswordPolicy =
+    SYSTEM_ADMIN_SECURITY_SETTINGS.password.minLength >= 12 &&
+    SYSTEM_ADMIN_SECURITY_SETTINGS.password.requireUppercase &&
+    SYSTEM_ADMIN_SECURITY_SETTINGS.password.requireLowercase &&
+    SYSTEM_ADMIN_SECURITY_SETTINGS.password.requireNumber &&
+    SYSTEM_ADMIN_SECURITY_SETTINGS.password.requireSpecial
+
+  return {
+    loggingEnabledModules,
+    activeIntegrations,
+    failedNotifications,
+    strictPasswordPolicy,
+    backupEnabled: SYSTEM_ADMIN_PLATFORM_SETTINGS.backup.enabled,
+  }
+}
+
 export function getAllowedReferralStatusTransitions(currentStatus: ReferralStatus): ReferralStatus[] {
   if (currentStatus === 'PENDING') {
     return ['PENDING', 'PROCESSING', 'REJECTED']
@@ -1149,12 +1748,15 @@ export type CaseOverviewData = {
     dateOfBirth: string
     gender: string
     homeAddress: string
+    homeAddressParts: AddressParts
     specialCategories: string[]
   }
   nextOfKin: {
     fullName: string
     contactNumber: string
     emailAddress: string
+    homeAddress: string
+    homeAddressParts: AddressParts
   }
   workHistory: {
     lastCountry: string
@@ -1520,13 +2122,16 @@ function buildCaseOverview(trackedCase: SharedReferralCase): CaseOverviewData {
       fullName: trackedCase.clientName,
       dateOfBirth: persona.ofwBirth.split(' (')[0],
       gender: persona.gender,
-      homeAddress: persona.ofwAddress,
+      homeAddress: formatAddressParts(persona.ofwAddress),
+      homeAddressParts: persona.ofwAddress,
       specialCategories,
     },
     nextOfKin: {
       fullName: nextOfKin.name,
       contactNumber: nextOfKin.contact,
       emailAddress: nextOfKin.email,
+      homeAddress: formatAddressParts(nextOfKin.address),
+      homeAddressParts: nextOfKin.address,
     },
     workHistory: {
       lastCountry: persona.lastCountry,

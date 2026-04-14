@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
-import { CASE_MANAGER_CASES, formatDisplayDateTime, toCaseHealthStatus } from '../../data/unifiedData'
+import { CASE_MANAGER_CASES, formatAddressParts, formatDisplayDateTime, toCaseHealthStatus } from '../../data/unifiedData'
 import { getReferralActorsForCase } from '../../data/unifiedData'
 import {
   getCaseClosureRemarkBySeed,
@@ -190,7 +190,7 @@ export default function ClientDetailsPage() {
               <InfoField label="Full Name" value={profile.ofwName} />
               <InfoField label="Email Address" value={profile.ofwEmail} />
               <InfoField label="Contact Number" value={profile.ofwContact} />
-              <InfoField label="Home Address" value={profile.ofwAddress} className="md:col-span-3" />
+              <InfoField label="Home Address" value={formatAddressParts(profile.ofwAddress)} className="md:col-span-3" />
             </div>
           </div>
 
@@ -200,7 +200,7 @@ export default function ClientDetailsPage() {
               <InfoField label="Full Name" value={profile.nextOfKinName} />
               <InfoField label="Contact Number" value={profile.nextOfKinContact} />
               <InfoField label="Email Address" value={profile.nextOfKinEmail} />
-              <InfoField label="Home Address" value={profile.nextOfKinAddress} className="md:col-span-3" />
+              <InfoField label="Home Address" value={formatAddressParts(profile.nextOfKinAddress)} className="md:col-span-3" />
             </div>
           </div>
         </div>

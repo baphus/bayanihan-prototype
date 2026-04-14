@@ -1,13 +1,66 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Check, ChevronRight, ChevronLeft } from 'lucide-react'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { AppButton } from '../../components/ui/AppButton'
-import { CASE_MANAGER_CASES } from '../../data/unifiedData'
-import { getExistingClientProfile } from '../../data/unifiedData'
+import AddressFieldGroup from '../../components/ui/AddressFieldGroup'
+import {
+  CASE_MANAGER_CASES,
+  createEmptyAddressParts,
+  formatPersonName,
+  getExistingClientProfile,
+  toCaseHealthStatus,
+} from '../../data/unifiedData'
+import { createManagedCase } from '../../data/caseLifecycleStore'
 
 type ClientType = 'Overseas Filipino Worker' | 'Next of Kin'
 type ClientSource = 'existing' | 'new'
+type NameParts = {
+  firstName: string
+  middleInitial: string
+  lastName: string
+  suffix: string
+}
+
+const NAME_SUFFIX_OPTIONS = ['', 'Jr', 'Sr', 'II', 'III', 'IV', 'V']
+
+function splitNameParts(rawName: string): NameParts {
+  const normalized = rawName.trim().replace(/\s+/g, ' ')
+
+  if (!normalized) {
+    return { firstName: '', middleInitial: '', lastName: '', suffix: '' }
+  }
+
+  const tokens = normalized.split(' ')
+  const suffixCandidate = tokens[tokens.length - 1]?.replace(/\./g, '')
+  const hasSuffix = NAME_SUFFIX_OPTIONS.some(
+    (option) => option.length > 0 && option.toUpperCase() === suffixCandidate?.toUpperCase(),
+  )
+
+  const suffix = hasSuffix ? tokens.pop() ?? '' : ''
+
+  if (tokens.length === 1) {
+    return { firstName: tokens[0], middleInitial: '', lastName: '', suffix }
+  }
+
+  if (tokens.length === 2) {
+    return { firstName: tokens[0], middleInitial: '', lastName: tokens[1], suffix }
+  }
+
+  const firstName = tokens[0]
+  const middleInitial = tokens[tokens.length - 2].replace(/\./g, '').charAt(0).toUpperCase()
+  const lastName = tokens[tokens.length - 1]
+
+  return { firstName, middleInitial, lastName, suffix }
+}
+
+function composeNameParts(parts: NameParts): string {
+  return formatPersonName(
+    [parts.firstName.trim(), parts.middleInitial.trim(), parts.lastName.trim(), parts.suffix.trim()]
+      .filter(Boolean)
+      .join(' '),
+  )
+}
 
 function generateTrackingId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -60,7 +113,7 @@ export default function NewCasePage() {
   const existingClients = useMemo(
     () => {
       const clients = CASE_MANAGER_CASES.reduce<
-        Record<string, { id: string; clientName: string; caseCount: number }>
+        Record<string, { id: string; clientName: string; activeCaseCount: number }>
       >((acc, item) => {
         const key = item.clientName
 
@@ -68,11 +121,14 @@ export default function NewCasePage() {
           acc[key] = {
             id: key,
             clientName: item.clientName,
-            caseCount: 0,
+            activeCaseCount: 0,
           }
         }
 
-        acc[key].caseCount += 1
+        if (toCaseHealthStatus(item.status) === 'OPEN') {
+          acc[key].activeCaseCount += 1
+        }
+
         return acc
       }, {})
 
@@ -86,20 +142,30 @@ export default function NewCasePage() {
   const [clientSource, setClientSource] = useState<ClientSource>('existing')
   const [selectedExistingClientId, setSelectedExistingClientId] = useState(() => existingClients[0]?.id ?? '')
   const [clientType, setClientType] = useState<ClientType>('Overseas Filipino Worker')
-  const [ofwFullName, setOfwFullName] = useState('')
+  const [ofwNameParts, setOfwNameParts] = useState<NameParts>({
+    firstName: '',
+    middleInitial: '',
+    lastName: '',
+    suffix: '',
+  })
   const [ofwBirthDate, setOfwBirthDate] = useState('')
   const [ofwGender, setOfwGender] = useState('Male')
   const [ofwEmail, setOfwEmail] = useState('')
   const [ofwContact, setOfwContact] = useState('')
-  const [ofwAddress, setOfwAddress] = useState('')
+  const [ofwAddress, setOfwAddress] = useState(createEmptyAddressParts)
   const [specialSenior, setSpecialSenior] = useState(false)
   const [specialPwd, setSpecialPwd] = useState(false)
   const [specialSoloParent, setSpecialSoloParent] = useState(false)
   const [hasNextOfKin, setHasNextOfKin] = useState<boolean>(true)
-  const [kinName, setKinName] = useState('')
+  const [kinNameParts, setKinNameParts] = useState<NameParts>({
+    firstName: '',
+    middleInitial: '',
+    lastName: '',
+    suffix: '',
+  })
   const [kinContact, setKinContact] = useState('')
   const [kinEmail, setKinEmail] = useState('')
-  const [kinAddress, setKinAddress] = useState('')
+  const [kinAddress, setKinAddress] = useState(createEmptyAddressParts)
   const [lastCountry, setLastCountry] = useState('')
   const [lastJobPosition, setLastJobPosition] = useState('')
   const [arrivalDate, setArrivalDate] = useState('')
@@ -111,19 +177,40 @@ export default function NewCasePage() {
     [selectedExistingClient],
   )
 
+  useEffect(() => {
+    if (clientSource !== 'existing' || !selectedExistingClientProfile) {
+      return
+    }
+
+    setOfwNameParts(splitNameParts(selectedExistingClientProfile.fullName))
+    setOfwBirthDate(selectedExistingClientProfile.birthDate)
+    setOfwGender(selectedExistingClientProfile.gender)
+    setOfwEmail(selectedExistingClientProfile.email)
+    setOfwContact(selectedExistingClientProfile.contact)
+    setOfwAddress({ ...selectedExistingClientProfile.address })
+    setLastCountry(selectedExistingClientProfile.lastCountry)
+    setLastJobPosition(selectedExistingClientProfile.lastJob)
+    setArrivalDate(selectedExistingClientProfile.arrivalDate)
+    setHasNextOfKin(selectedExistingClientProfile.hasNextOfKin)
+    setKinNameParts(splitNameParts(selectedExistingClientProfile.kinName))
+    setKinContact(selectedExistingClientProfile.kinContact)
+    setKinEmail(selectedExistingClientProfile.kinEmail)
+    setKinAddress({ ...selectedExistingClientProfile.kinAddress })
+  }, [clientSource, selectedExistingClientProfile])
+
   const canProceedToNextStep = () => {
     if (currentStep === 1) return true
     if (currentStep === 2) {
       return clientSource === 'existing'
         ? selectedExistingClientId.trim().length > 0
-        : ofwFullName.trim().length > 0
+        : ofwNameParts.firstName.trim().length > 0 && ofwNameParts.lastName.trim().length > 0
     }
     return true
   }
 
   const canSubmit = currentStep === 3 && (clientSource === 'existing'
     ? selectedExistingClientId.trim().length > 0
-    : ofwFullName.trim().length > 0)
+    : ofwNameParts.firstName.trim().length > 0 && ofwNameParts.lastName.trim().length > 0)
 
   const handleNext = () => {
     if (canProceedToNextStep() && currentStep < 3) {
@@ -145,8 +232,8 @@ export default function NewCasePage() {
     const nowIso = new Date().toISOString()
     const clientName =
       clientSource === 'existing'
-        ? selectedExistingClient?.clientName ?? 'Unnamed Client'
-        : ofwFullName.trim() || 'Unnamed Client'
+        ? formatPersonName(composeNameParts(ofwNameParts).trim() || selectedExistingClient?.clientName || 'Unnamed Client')
+        : formatPersonName(composeNameParts(ofwNameParts).trim() || 'Unnamed Client')
 
     const createdCasePayload = {
       id: caseId,
@@ -163,6 +250,8 @@ export default function NewCasePage() {
       agencyName: 'Not yet referred',
       caseNarrative: caseNarrative.trim(),
     }
+
+    createManagedCase(createdCasePayload)
 
     navigate(`/case-manager/cases/${caseId}`, {
       state: {
@@ -252,7 +341,7 @@ export default function NewCasePage() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col p-8 min-h-[520px]">
+        <div className="flex-1 flex flex-col p-8">
           <div className="flex-1">
             <div className="mb-6 rounded-xl border border-slate-200 bg-gradient-to-br from-[#f7fbff] via-white to-white p-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
@@ -374,7 +463,7 @@ export default function NewCasePage() {
               <>
                 <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                   <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-500">Select client</h3>
-                  <p className="mt-2 text-[13px] text-slate-500">We will preload their profile so you can review faster.</p>
+                  <p className="mt-2 text-[13px] text-slate-500">We will preload their profile and you can still edit all fields below.</p>
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Field label="Client" required>
                       <select
@@ -390,9 +479,9 @@ export default function NewCasePage() {
                       </select>
                     </Field>
 
-                    <Field label="Existing Cases">
+                    <Field label="Active Cases">
                       <input
-                        value={selectedExistingClient ? `${selectedExistingClient.caseCount} case(s)` : '-'}
+                        value={selectedExistingClient ? `${selectedExistingClient.activeCaseCount} case(s)` : '-'}
                         readOnly
                         className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700"
                       />
@@ -403,60 +492,124 @@ export default function NewCasePage() {
                 {selectedExistingClientProfile ? (
                   <div className="mt-2 space-y-5 rounded-xl border border-slate-200 bg-[#fcfdff] p-6 shadow-sm">
                     <Subsection title="OFW Information">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Field label="Full Name">
-                          <input value={selectedExistingClientProfile.fullName} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <Field label="First Name">
+                          <input value={ofwNameParts.firstName} onChange={(event) => setOfwNameParts((prev) => ({ ...prev, firstName: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                        </Field>
+                        <Field label="Middle Initial">
+                          <input value={ofwNameParts.middleInitial} maxLength={1} onChange={(event) => setOfwNameParts((prev) => ({ ...prev, middleInitial: event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase() }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                        </Field>
+                        <Field label="Last Name">
+                          <input value={ofwNameParts.lastName} onChange={(event) => setOfwNameParts((prev) => ({ ...prev, lastName: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                        </Field>
+                        <Field label="Suffix">
+                          <select value={ofwNameParts.suffix} onChange={(event) => setOfwNameParts((prev) => ({ ...prev, suffix: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]">
+                            <option value="">None</option>
+                            {NAME_SUFFIX_OPTIONS.filter((item) => item).map((item) => (
+                              <option key={item} value={item}>{item}</option>
+                            ))}
+                          </select>
                         </Field>
                         <Field label="Date of Birth">
-                          <input value={selectedExistingClientProfile.birthDate} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                          <input value={ofwBirthDate} onChange={(event) => setOfwBirthDate(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                         </Field>
                         <Field label="Gender">
-                          <input value={selectedExistingClientProfile.gender} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                          <select value={ofwGender} onChange={(event) => setOfwGender(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]">
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                          </select>
                         </Field>
                         <Field label="Email Address">
-                          <input value={selectedExistingClientProfile.email} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                          <input value={ofwEmail} onChange={(event) => setOfwEmail(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                         </Field>
                         <Field label="Contact Number">
-                          <input value={selectedExistingClientProfile.contact} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                          <input value={ofwContact} onChange={(event) => setOfwContact(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                         </Field>
-                        <Field label="Home Address" className="md:col-span-3">
-                          <textarea rows={3} value={selectedExistingClientProfile.address} readOnly className="w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700" />
-                        </Field>
+                        <AddressFieldGroup
+                          className="md:col-span-3"
+                          value={ofwAddress}
+                          onChange={setOfwAddress}
+                        />
                       </div>
                     </Subsection>
 
                     <Subsection title="Work History">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <Field label="Last Country">
-                          <input value={selectedExistingClientProfile.lastCountry} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                          <input value={lastCountry} onChange={(event) => setLastCountry(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                         </Field>
                         <Field label="Last Job Position">
-                          <input value={selectedExistingClientProfile.lastJob} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                          <input value={lastJobPosition} onChange={(event) => setLastJobPosition(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                         </Field>
                         <Field label="Arrival Date in Philippines">
-                          <input value={selectedExistingClientProfile.arrivalDate} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                          <input value={arrivalDate} onChange={(event) => setArrivalDate(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                         </Field>
                       </div>
                     </Subsection>
 
                     <Subsection title="Next of Kin Information">
                       <Field label="Does the client have a next of kin?">
-                        <input value={selectedExistingClientProfile.hasNextOfKin ? 'Yes' : 'No'} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                          <label
+                            className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
+                              hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="existing-has-next-of-kin"
+                              className="sr-only"
+                              checked={hasNextOfKin}
+                              onChange={() => setHasNextOfKin(true)}
+                            />
+                            Yes
+                          </label>
+                          <label
+                            className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
+                              !hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="existing-has-next-of-kin"
+                              className="sr-only"
+                              checked={!hasNextOfKin}
+                              onChange={() => setHasNextOfKin(false)}
+                            />
+                            No
+                          </label>
+                        </div>
                       </Field>
-                      {selectedExistingClientProfile.hasNextOfKin ? (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                          <Field label="Full Name">
-                            <input value={selectedExistingClientProfile.kinName} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                      {hasNextOfKin ? (
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                          <Field label="First Name">
+                            <input value={kinNameParts.firstName} onChange={(event) => setKinNameParts((prev) => ({ ...prev, firstName: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                          </Field>
+                          <Field label="Middle Initial">
+                            <input value={kinNameParts.middleInitial} maxLength={1} onChange={(event) => setKinNameParts((prev) => ({ ...prev, middleInitial: event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase() }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                          </Field>
+                          <Field label="Last Name">
+                            <input value={kinNameParts.lastName} onChange={(event) => setKinNameParts((prev) => ({ ...prev, lastName: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                          </Field>
+                          <Field label="Suffix">
+                            <select value={kinNameParts.suffix} onChange={(event) => setKinNameParts((prev) => ({ ...prev, suffix: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]">
+                              <option value="">None</option>
+                              {NAME_SUFFIX_OPTIONS.filter((item) => item).map((item) => (
+                                <option key={item} value={item}>{item}</option>
+                              ))}
+                            </select>
                           </Field>
                           <Field label="Contact Number">
-                            <input value={selectedExistingClientProfile.kinContact} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                            <input value={kinContact} onChange={(event) => setKinContact(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                           </Field>
                           <Field label="Email Address">
-                            <input value={selectedExistingClientProfile.kinEmail} readOnly className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700" />
+                            <input value={kinEmail} onChange={(event) => setKinEmail(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                           </Field>
-                          <Field label="Home Address" className="md:col-span-3">
-                            <textarea rows={3} value={selectedExistingClientProfile.kinAddress} readOnly className="w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700" />
-                          </Field>
+                          <AddressFieldGroup
+                            className="md:col-span-3"
+                            value={kinAddress}
+                            onChange={setKinAddress}
+                          />
                         </div>
                       ) : null}
                     </Subsection>
@@ -469,14 +622,43 @@ export default function NewCasePage() {
           <div className="space-y-6 mt-6 pt-6 border-t border-slate-100">
               <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                 <Subsection title="OFW Information">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Field label="Full Name" required>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Field label="First Name" required>
                     <input
-                      value={ofwFullName}
-                      onChange={(event) => setOfwFullName(event.target.value)}
-                      placeholder="e.g. Dela Cruz, Maria L."
+                      value={ofwNameParts.firstName}
+                      onChange={(event) => setOfwNameParts((prev) => ({ ...prev, firstName: event.target.value }))}
                       className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
                     />
+                  </Field>
+
+                  <Field label="Middle Initial">
+                    <input
+                      value={ofwNameParts.middleInitial}
+                      maxLength={1}
+                      onChange={(event) => setOfwNameParts((prev) => ({ ...prev, middleInitial: event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase() }))}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                    />
+                  </Field>
+
+                  <Field label="Last Name" required>
+                    <input
+                      value={ofwNameParts.lastName}
+                      onChange={(event) => setOfwNameParts((prev) => ({ ...prev, lastName: event.target.value }))}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                    />
+                  </Field>
+
+                  <Field label="Suffix">
+                    <select
+                      value={ofwNameParts.suffix}
+                      onChange={(event) => setOfwNameParts((prev) => ({ ...prev, suffix: event.target.value }))}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                    >
+                      <option value="">None</option>
+                      {NAME_SUFFIX_OPTIONS.filter((item) => item).map((item) => (
+                        <option key={item} value={item}>{item}</option>
+                      ))}
+                    </select>
                   </Field>
 
                 <Field label="Date of Birth">
@@ -516,14 +698,12 @@ export default function NewCasePage() {
                   />
                 </Field>
 
-                <Field label="Home Address" className="md:col-span-3">
-                  <textarea
-                    rows={3}
-                    value={ofwAddress}
-                    onChange={(event) => setOfwAddress(event.target.value)}
-                    className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                  />
-                </Field>
+                <AddressFieldGroup
+                  className="md:col-span-3"
+                  required
+                  value={ofwAddress}
+                  onChange={setOfwAddress}
+                />
 
                   <Field label="Special Categories" className="md:col-span-3">
                     <div className="flex flex-wrap items-center gap-4 rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2">
@@ -612,13 +792,43 @@ export default function NewCasePage() {
                   </Field>
 
                   {hasNextOfKin ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                      <Field label="Full Name">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                      <Field label="First Name">
                         <input
-                          value={kinName}
-                          onChange={(event) => setKinName(event.target.value)}
+                          value={kinNameParts.firstName}
+                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, firstName: event.target.value }))}
                           className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
                         />
+                      </Field>
+
+                      <Field label="Middle Initial">
+                        <input
+                          value={kinNameParts.middleInitial}
+                          maxLength={1}
+                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, middleInitial: event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase() }))}
+                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                        />
+                      </Field>
+
+                      <Field label="Last Name">
+                        <input
+                          value={kinNameParts.lastName}
+                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, lastName: event.target.value }))}
+                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                        />
+                      </Field>
+
+                      <Field label="Suffix">
+                        <select
+                          value={kinNameParts.suffix}
+                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, suffix: event.target.value }))}
+                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                        >
+                          <option value="">None</option>
+                          {NAME_SUFFIX_OPTIONS.filter((item) => item).map((item) => (
+                            <option key={item} value={item}>{item}</option>
+                          ))}
+                        </select>
                       </Field>
 
                       <Field label="Contact Number">
@@ -638,14 +848,11 @@ export default function NewCasePage() {
                         />
                       </Field>
 
-                      <Field label="Home Address" className="md:col-span-3">
-                        <textarea
-                          rows={3}
-                          value={kinAddress}
-                          onChange={(event) => setKinAddress(event.target.value)}
-                          className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        />
-                      </Field>
+                      <AddressFieldGroup
+                        className="md:col-span-3"
+                        value={kinAddress}
+                        onChange={setKinAddress}
+                      />
                     </div>
                   ) : null}
                 </Subsection>

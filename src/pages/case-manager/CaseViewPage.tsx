@@ -1,13 +1,15 @@
-import { useMemo, useState, type JSX } from 'react'
+import { useMemo, useState, useEffect, type JSX } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Eye } from 'lucide-react'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import {
   CASE_MANAGER_CASES,
+  formatAddressParts,
   formatDisplayDateTime,
   getCaseManagerAgencies,
   getCaseManagerReferrals,
+  getStakeholderServices,
   resolveStakeholderService,
   toCaseHealthStatus,
   type CaseManagerReferral,
@@ -277,12 +279,18 @@ export default function CaseViewPage(): JSX.Element {
   const caseStatus = toCaseHealthStatus(caseRecord.status)
   const specialCategories = getSpecialCategories(caseRecord.caseNo)
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false)
+  const [isReferAgencyOpen, setIsReferAgencyOpen] = useState(false)
   const [editableClientType, setEditableClientType] = useState(caseRecord.clientType)
   const [editableNarrative, setEditableNarrative] = useState(
     createdCaseFromState?.caseNarrative?.trim().length
       ? createdCaseFromState.caseNarrative
       : getCaseNarrativeBySeed(caseRecord.id),
   )
+  const [manualReferralRows, setManualReferralRows] = useState<ReferralRow[]>([])
+  const [referAgencyId, setReferAgencyId] = useState('')
+  const [referServiceValue, setReferServiceValue] = useState('')
+  const [referRemarks, setReferRemarks] = useState('')
+  const [referNotes, setReferNotes] = useState('')
 
   const allAgencies = getCaseManagerAgencies()
   const seed = stableSeed(caseRecord.id)
@@ -317,7 +325,7 @@ export default function CaseViewPage(): JSX.Element {
   const statusPool: ReferralRow['referralStatus'][] = ['PENDING', 'PROCESSING', 'COMPLETED', 'REJECTED']
   const seededReferrals = getCaseManagerReferrals().filter((referral) => referral.caseId === caseRecord.id)
 
-  const referralRows: ReferralRow[] = agencyPool.map((agency, index) => {
+  const generatedReferralRows: ReferralRow[] = agencyPool.map((agency, index) => {
     const existingReferral = seededReferrals.find((referral) => referral.agencyId === agency.id)
     const inferredStatus = statusPool[(seed + index) % statusPool.length]
     const status = existingReferral?.status ?? (index === 0 ? caseRecord.status : inferredStatus)
@@ -352,8 +360,89 @@ export default function CaseViewPage(): JSX.Element {
       updatedAtIso,
     }
   })
+  const referralRows = useMemo(
+    () => [...generatedReferralRows, ...manualReferralRows],
+    [generatedReferralRows, manualReferralRows],
+  )
   const timeline = buildCaseTimeline(caseRecord.id, caseRecord.createdAt, referralRows)
   const [timelineAgencyFilter, setTimelineAgencyFilter] = useState('ALL')
+
+  const referredAgencyIds = useMemo(() => new Set(referralRows.map((row) => row.referral.agencyId)), [referralRows])
+  const referableAgencies = useMemo(
+    () => allAgencies.filter((agency) => !referredAgencyIds.has(agency.id)),
+    [allAgencies, referredAgencyIds],
+  )
+  const availableReferServices = useMemo(() => getStakeholderServices(referAgencyId), [referAgencyId])
+
+  useEffect(() => {
+    if (!availableReferServices.length) {
+      setReferServiceValue('')
+      return
+    }
+
+    if (!availableReferServices.includes(referServiceValue)) {
+      setReferServiceValue(availableReferServices[0])
+    }
+  }, [availableReferServices, referServiceValue])
+
+  const openReferAgencyModal = () => {
+    const defaultAgency = referableAgencies[0]
+    const defaultAgencyId = defaultAgency?.id ?? ''
+
+    setReferAgencyId(defaultAgencyId)
+    setReferServiceValue(resolveStakeholderService(defaultAgencyId, caseRecord.service))
+    setReferRemarks('')
+    setReferNotes('')
+    setIsReferAgencyOpen(true)
+  }
+
+  const submitReferToAgency = () => {
+    if (!referAgencyId || !referServiceValue.trim()) {
+      return
+    }
+
+    const selectedReferAgency = allAgencies.find((agency) => agency.id === referAgencyId)
+
+    if (!selectedReferAgency) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    const referralId = `ref-${caseRecord.id}-${referAgencyId}-${Date.now()}`
+
+    const referralPayload: CaseManagerReferral = {
+      id: referralId,
+      caseId: caseRecord.id,
+      caseNo: caseRecord.caseNo,
+      clientName: caseRecord.clientName,
+      service: resolveStakeholderService(referAgencyId, referServiceValue.trim()),
+      agencyId: selectedReferAgency.id,
+      agencyName: selectedReferAgency.name,
+      status: 'PENDING',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      remarks: referRemarks.trim() || 'Referral created from Case View page.',
+      notes: referNotes.trim() || 'No additional notes provided.',
+      documents: [],
+    }
+
+    setManualReferralRows((prev) => [
+      {
+        id: `${caseRecord.id}-ref-${selectedReferAgency.id}-${Date.now()}`,
+        referral: referralPayload,
+        agency: selectedReferAgency.name,
+        referralStatus: 'PENDING',
+        service: referralPayload.service,
+        latestMilestone: 'Referral Sent',
+        dateReferred: formatDisplayDateTime(nowIso),
+        dateReferredIso: nowIso,
+        updatedAtIso: nowIso,
+      },
+      ...prev,
+    ])
+
+    setIsReferAgencyOpen(false)
+  }
 
   const timelineAgencies = useMemo(() => {
     const unique = new Set<string>()
@@ -490,7 +579,7 @@ export default function CaseViewPage(): JSX.Element {
                   <InfoCell label="Email Address" value={persona.ofwEmail} />
                   <InfoCell label="Contact Number" value={persona.ofwContact} />
                   <InfoCell label=" " value=" " />
-                  <InfoCell label="Home Address" value={persona.ofwAddress} fullRow />
+                  <InfoCell label="Home Address" value={formatAddressParts(persona.ofwAddress)} fullRow />
                 </div>
 
                 <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3">
@@ -519,7 +608,7 @@ export default function CaseViewPage(): JSX.Element {
                   <InfoCell label="Full Name" value={persona.kinName} />
                   <InfoCell label="Contact Number" value={persona.kinContact} />
                   <InfoCell label="Email Address" value={persona.kinEmail} />
-                  <InfoCell label="Home Address" value={persona.kinAddress} fullRow />
+                  <InfoCell label="Home Address" value={formatAddressParts(persona.kinAddress)} fullRow />
                 </div>
               </Subsection>
             </div>
@@ -530,9 +619,11 @@ export default function CaseViewPage(): JSX.Element {
               <h4 className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#64748b]">Agency Referrals</h4>
               <button
                 type="button"
-                className="px-3 min-h-[30px] bg-[#f1f5f9] text-slate-700 hover:bg-slate-200 text-[11px] font-bold rounded-[3px] transition-colors border border-slate-300"
+                onClick={openReferAgencyModal}
+                disabled={referableAgencies.length === 0}
+                className="px-3 min-h-[30px] bg-[#f1f5f9] text-slate-700 hover:bg-slate-200 text-[11px] font-bold rounded-[3px] transition-colors border border-slate-300 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                + Refer to a Stakeholder
+                + Refer to Agency
               </button>
             </div>
             <UnifiedTable
@@ -664,6 +755,95 @@ export default function CaseViewPage(): JSX.Element {
                 className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isReferAgencyOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-2xl rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
+            <div className="border-b border-[#e2e8f0] px-5 py-4">
+              <h2 className="text-[16px] font-extrabold text-slate-900">Refer to Agency</h2>
+              <p className="mt-1 text-[12px] text-slate-500">Create a new agency referral for this case.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 px-5 py-4 md:grid-cols-2">
+              <div className="md:col-span-2 rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2 text-[12px] text-slate-700">
+                Case: <span className="font-semibold">{caseRecord.caseNo}</span> ({caseRecord.clientName})
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Agency</label>
+                <select
+                  value={referAgencyId}
+                  onChange={(event) => setReferAgencyId(event.target.value)}
+                  className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+                >
+                  {referableAgencies.map((agency) => (
+                    <option key={agency.id} value={agency.id}>{agency.name}</option>
+                  ))}
+                  {referableAgencies.length === 0 ? <option value="">No additional agencies available</option> : null}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Service</label>
+                <select
+                  value={referServiceValue}
+                  onChange={(event) => setReferServiceValue(event.target.value)}
+                  disabled={!availableReferServices.length}
+                  className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+                >
+                  {availableReferServices.length ? (
+                    availableReferServices.map((service) => (
+                      <option key={service} value={service}>{service}</option>
+                    ))
+                  ) : (
+                    <option value="">No service available</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Remarks</label>
+                <textarea
+                  rows={3}
+                  value={referRemarks}
+                  onChange={(event) => setReferRemarks(event.target.value)}
+                  className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
+                  placeholder="Optional remarks for this referral"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Notes</label>
+                <textarea
+                  rows={3}
+                  value={referNotes}
+                  onChange={(event) => setReferNotes(event.target.value)}
+                  className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
+                  placeholder="Optional internal notes"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-[#e2e8f0] px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setIsReferAgencyOpen(false)}
+                className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitReferToAgency}
+                disabled={!referAgencyId || !referServiceValue.trim()}
+                className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Submit Referral
               </button>
             </div>
           </div>

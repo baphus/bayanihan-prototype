@@ -1,18 +1,55 @@
-import { LayoutDashboard, FolderOpen, User, Building2, Briefcase, ArrowRightLeft, ShieldCheck, History } from 'lucide-react'
+import {
+  LayoutDashboard,
+  FolderOpen,
+  User,
+  Building2,
+  Briefcase,
+  ArrowRightLeft,
+  ShieldCheck,
+  History,
+  ScrollText,
+  Plug,
+  BellRing,
+  ShieldAlert,
+  Settings2,
+} from 'lucide-react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import type { JSX } from 'react'
 import AppSidebar from './AppSidebar'
 import { clearActiveRole } from '../../utils/authSession'
 
-const navigation = [
-  { name: 'Dashboard', href: '/system-admin/dashboard', icon: LayoutDashboard },
-  { name: 'Cases', href: '/system-admin/cases', icon: FolderOpen },
-  { name: 'Clients', href: '/system-admin/clients', icon: User },
-  { name: 'Agencies', href: '/system-admin/agencies', icon: Building2 },
-  { name: 'Services', href: '/system-admin/services', icon: Briefcase },
-  { name: 'Referrals', href: '/system-admin/referrals', icon: ArrowRightLeft },
-  { name: 'Users', href: '/system-admin/users', icon: ShieldCheck },
-  { name: 'Activity Logs', href: '/system-admin/activity-logs', icon: History },
+const navigationGroups = [
+  {
+    label: 'Overview',
+    items: [{ name: 'Dashboard', href: '/system-admin/dashboard', icon: LayoutDashboard }],
+  },
+  {
+    label: 'Case Operations',
+    items: [
+      { name: 'Cases', href: '/system-admin/cases', icon: FolderOpen },
+      { name: 'Clients', href: '/system-admin/clients', icon: User },
+      { name: 'Agencies', href: '/system-admin/agencies', icon: Building2 },
+      { name: 'Services', href: '/system-admin/services', icon: Briefcase },
+      { name: 'Referrals', href: '/system-admin/referrals', icon: ArrowRightLeft },
+    ],
+  },
+  {
+    label: 'Governance',
+    items: [
+      { name: 'Users', href: '/system-admin/users', icon: ShieldCheck },
+      { name: 'Activity Logs', href: '/system-admin/activity-logs', icon: History },
+      { name: 'Audit & Logging', href: '/system-admin/audit-logging', icon: ScrollText },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [
+      { name: 'Integrations', href: '/system-admin/integrations', icon: Plug },
+      { name: 'Notifications', href: '/system-admin/notifications', icon: BellRing },
+      { name: 'Security Policies', href: '/system-admin/security-policies', icon: ShieldAlert },
+      { name: 'System Settings', href: '/system-admin/system-settings', icon: Settings2 },
+    ],
+  },
 ]
 
 export default function SystemAdminLayout(): JSX.Element {
@@ -26,7 +63,7 @@ export default function SystemAdminLayout(): JSX.Element {
   return (
     <div className="flex h-screen bg-[#f1f4fa] font-sans">
       <AppSidebar
-        navigation={navigation}
+        navigationGroups={navigationGroups}
         user={{
           name: 'System Administrator',
           role: 'Platform Governance',

@@ -21,6 +21,7 @@ export default function ActivityLogsPage() {
         { value: 'REJECTED', label: 'Rejected' },
       ]}
       showStatusFilter
+      density="comfortable"
     />
   )
 }

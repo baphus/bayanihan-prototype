@@ -230,6 +230,7 @@ export default function TrackCasePage() {
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Full Name</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.fullName}</dd></div>
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Contact Number</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.contactNumber}</dd></div>
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Email Address</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.emailAddress}</dd></div>
+                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Home Address</dt><dd className="font-bold text-[11.5px] text-on-surface leading-snug">{pageData.caseOverview.nextOfKin.homeAddress}</dd></div>
                     </dl>
                   </div>
 

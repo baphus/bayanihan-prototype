@@ -38,6 +38,11 @@ import SystemAdminServicesPage from './pages/system-admin/ServicesPage'
 import SystemAdminReferralsPage from './pages/system-admin/ReferralsPage'
 import SystemAdminUsersPage from './pages/system-admin/UsersPage'
 import SystemAdminActivityLogsPage from './pages/system-admin/ActivityLogsPage'
+import SystemAdminAuditLoggingPage from './pages/system-admin/AuditLoggingPage'
+import SystemAdminIntegrationsPage from './pages/system-admin/IntegrationsPage'
+import SystemAdminNotificationsPage from './pages/system-admin/NotificationsPage'
+import SystemAdminSecurityPoliciesPage from './pages/system-admin/SecurityPoliciesPage'
+import SystemAdminSystemSettingsPage from './pages/system-admin/SystemSettingsPage'
 import RequireRole from './components/auth/RequireRole'
 
 export default function App() {
@@ -96,6 +101,11 @@ export default function App() {
           <Route path="referrals" element={<SystemAdminReferralsPage />} />
           <Route path="users" element={<SystemAdminUsersPage />} />
           <Route path="activity-logs" element={<SystemAdminActivityLogsPage />} />
+          <Route path="audit-logging" element={<SystemAdminAuditLoggingPage />} />
+          <Route path="integrations" element={<SystemAdminIntegrationsPage />} />
+          <Route path="notifications" element={<SystemAdminNotificationsPage />} />
+          <Route path="security-policies" element={<SystemAdminSecurityPoliciesPage />} />
+          <Route path="system-settings" element={<SystemAdminSystemSettingsPage />} />
         </Route>
 
         <Route path="/track/:trackerNumber/milestones" element={<MilestonesPage />} />

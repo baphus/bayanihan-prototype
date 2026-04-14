@@ -6,6 +6,7 @@ import { getStatusBadgeClass } from './statusBadgeStyles'
 import { REFERRAL_CASES } from '../../data/unifiedData'
 import { getCaseNarrativeBySeed } from '../../data/unifiedData'
 import { getCaseAgency } from '../../data/unifiedData'
+import { formatAddressParts, getClientPersona, type AddressParts } from '../../data/unifiedData'
 
 type CaseStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
 type ClientType = 'Next of Kin' | 'Overseas Filipino Worker'
@@ -26,11 +27,11 @@ type DetailCase = {
   ofwGender: string
   ofwEmail: string
   ofwContact: string
-  ofwAddress: string
+  ofwAddress: AddressParts
   nextOfKin: string
   kinContact: string
   kinEmail: string
-  kinAddress: string
+  kinAddress: AddressParts
   lastCountry: string
   lastJob: string
   arrivalDate: string
@@ -97,6 +98,7 @@ const CASE_SEEDS: CaseSeed[] = REFERRAL_CASES.map((item) => ({
 const CASES: DetailCase[] = CASE_SEEDS.map((seed, index) => {
   const kinName = `Kin of ${seed.clientName.split(',')[0]}`
   const contact = `+63 917 123 45${(index + 10).toString().slice(-2)}`
+  const persona = getClientPersona(seed.id)
   const specialCategories: SpecialCategory[] = []
 
   if (index % 5 === 0) {
@@ -121,15 +123,15 @@ const CASES: DetailCase[] = CASE_SEEDS.map((seed, index) => {
     dateReceived: seed.dateReceived,
     dateUpdated: seed.dateUpdated,
     ofwFullName: seed.clientName,
-    ofwBirthDate: `May ${String((index % 20) + 1).padStart(2, '0')}, ${1985 + (index % 10)} (${30 + (index % 12)} yrs)`,
-    ofwGender: index % 2 === 0 ? 'Male' : 'Female',
+    ofwBirthDate: persona.ofwBirth,
+    ofwGender: persona.gender,
     ofwEmail: `${seed.clientName.toLowerCase().replace(/[^a-z]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '')}@email.ph`,
     ofwContact: contact,
-    ofwAddress: `Blk ${index + 10}, Lot ${index + 30}, Greenview Subd., Brgy. San Jose, Quezon City`,
+    ofwAddress: persona.ofwAddress,
     nextOfKin: kinName,
     kinContact: contact,
     kinEmail: `kin.${seed.id.toLowerCase()}@email.ph`,
-    kinAddress: `Blk ${index + 10}, Lot ${index + 30}, Greenview Subd., Brgy. San Jose, Quezon City`,
+    kinAddress: persona.kinAddress,
     lastCountry: ['Saudi Arabia', 'Qatar', 'UAE', 'Kuwait'][index % 4],
     lastJob: ['Construction Supervisor', 'Caregiver', 'Machine Operator', 'Domestic Worker'][index % 4],
     arrivalDate: `Oct ${String((index % 28) + 1).padStart(2, '0')}, 2023`,
@@ -374,7 +376,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
                   <InfoCell label="Email Address" value={selectedCase.ofwEmail} />
                   <InfoCell label="Contact Number" value={selectedCase.ofwContact} />
                   <InfoCell label=" " value=" " />
-                  <InfoCell label="Home Address" value={selectedCase.ofwAddress} fullRow />
+                  <InfoCell label="Home Address" value={formatAddressParts(selectedCase.ofwAddress)} fullRow />
                 </div>
 
                 {selectedCase.specialCategories.length > 0 ? (
@@ -410,7 +412,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
                     <InfoCell label="Full Name" value={selectedCase.nextOfKin} />
                     <InfoCell label="Contact Number" value={selectedCase.kinContact} />
                     <InfoCell label="Email Address" value={selectedCase.kinEmail} />
-                    <InfoCell label="Home Address" value={selectedCase.kinAddress} fullRow />
+                    <InfoCell label="Home Address" value={formatAddressParts(selectedCase.kinAddress)} fullRow />
                   </div>
                 </div>
               ) : null}

@@ -4,6 +4,11 @@ import { buildCaseManagerOversightActivityLogs } from '../../data/unifiedData'
 
 export default function AuditLogsPage() {
   const logs = useMemo(() => buildCaseManagerOversightActivityLogs(), [])
+  const actorOptions = useMemo(() => {
+    return Array.from(new Set(logs.map((log) => log.actor)))
+      .sort()
+      .map((actor) => ({ value: actor, label: actor }))
+  }, [logs])
 
   return (
     <ActivityTimelineView
@@ -25,7 +30,10 @@ export default function AuditLogsPage() {
         { value: 'COMPLETED', label: 'Completed' },
         { value: 'REJECTED', label: 'Rejected' },
       ]}
+      actorOptions={actorOptions}
       showStatusFilter
+      showActorFilter
+      density="compact"
     />
   )
 }

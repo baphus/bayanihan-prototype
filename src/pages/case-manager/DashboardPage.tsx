@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Users, FolderCheck, Plus, FileEdit, Send, Eye, MoreHorizontal, ChevronRight } from 'lucide-react'
+import { ArrowRightLeft, Users, FolderCheck, Plus, Send, Eye, MoreHorizontal, ChevronRight, BarChart3 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -6,6 +6,7 @@ import { type Column } from '../../components/ui/UnifiedTable'
 import { RecentTable } from '../../components/ui/RecentTable'
 import {
   CASE_MANAGER_CASES,
+  getCaseManagerReferrals,
   formatDisplayDate,
   getAgencyReferralBreakdown,
   getCaseManagerAgencies,
@@ -25,6 +26,8 @@ type CaseRowData = {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+
+  const referrals = useMemo(() => getCaseManagerReferrals(), [])
 
   const sortedCases = useMemo(
     () => [...CASE_MANAGER_CASES].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
@@ -50,13 +53,13 @@ export default function DashboardPage() {
     agencyLogoUrl: agenciesById[item.agencyId]?.logoUrl ?? '/logo.png',
   }))
 
-  const uniqueClientCount = useMemo(() => new Set(CASE_MANAGER_CASES.map((item) => item.clientName)).size, [])
-  const pendingCount = useMemo(() => CASE_MANAGER_CASES.filter((item) => item.status === 'PENDING').length, [])
-  const closureReadyCount = useMemo(() => CASE_MANAGER_CASES.filter((item) => item.status === 'COMPLETED').length, [])
+  const uniqueClientCount = useMemo(() => new Set(referrals.map((item) => item.clientName)).size, [referrals])
+  const pendingCount = useMemo(() => referrals.filter((item) => item.status === 'PENDING').length, [referrals])
+  const closureReadyCount = useMemo(() => referrals.filter((item) => item.status === 'COMPLETED').length, [referrals])
 
   const statusBreakdown = useMemo(() => getStatusBreakdown(CASE_MANAGER_CASES), [])
   const openCount = statusBreakdown.PENDING + statusBreakdown.PROCESSING
-  const totalCases = CASE_MANAGER_CASES.length
+  const totalCases = referrals.length
   const openPercent = totalCases > 0 ? Math.round((openCount / totalCases) * 100) : 0
   const closedPercent = 100 - openPercent
 
@@ -68,7 +71,7 @@ export default function DashboardPage() {
     month: 'long',
     day: '2-digit',
     year: 'numeric',
-  }).format(new Date('2026-04-09'))
+  }).format(new Date())
 
   const clientTypeStats = useMemo(() => {
     const ofw = CASE_MANAGER_CASES.filter((item) => item.clientType === 'Overseas Filipino Worker').length
@@ -79,15 +82,81 @@ export default function DashboardPage() {
 
   const recentActivity = useMemo(
     () =>
-      sortedCases.slice(0, 3).map((item) => ({
-        id: item.id,
-        title: item.status === 'PENDING' ? 'Referral Queued' : item.status === 'PROCESSING' ? 'Referral Processing' : 'Referral Updated',
-        desc: `${item.caseNo} for ${item.clientName} is now ${item.status}.`,
-        time: formatDisplayDate(item.updatedAt),
-        logoSrc: item.status === 'PENDING' ? '/logo.png' : agenciesById[item.agencyId]?.logoUrl ?? '/logo.png',
-      })),
-    [sortedCases, agenciesById],
+      [...referrals]
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 4)
+        .map((item) => ({
+          id: item.id,
+          title:
+            item.status === 'PENDING'
+              ? 'Referral Queued'
+              : item.status === 'PROCESSING'
+                ? 'Referral Processing'
+                : item.status === 'COMPLETED'
+                  ? 'Referral Completed'
+                  : 'Referral Returned',
+          desc: `${item.caseNo} for ${item.clientName} was updated by ${item.agencyName}.`,
+          time: formatDisplayDate(item.updatedAt),
+          logoSrc: agenciesById[item.agencyId]?.logoUrl ?? '/logo.png',
+        })),
+    [referrals, agenciesById],
   )
+
+  const monthlyReferralVolume = useMemo(() => {
+    const bucket = new Map<string, { key: string; label: string; count: number }>()
+
+    referrals.forEach((item) => {
+      const date = new Date(item.createdAt)
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const label = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
+      const existing = bucket.get(key)
+
+      if (existing) {
+        existing.count += 1
+      } else {
+        bucket.set(key, { key, label, count: 1 })
+      }
+    })
+
+    return Array.from(bucket.values())
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .slice(-6)
+  }, [referrals])
+
+  const monthlyVolumeMax = monthlyReferralVolume.reduce((acc, item) => Math.max(acc, item.count), 1)
+
+  const monthlyCompletionRate = useMemo(() => {
+    const bucket = new Map<string, { key: string; label: string; total: number; completed: number }>()
+
+    referrals.forEach((item) => {
+      const date = new Date(item.updatedAt)
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const label = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
+      const existing = bucket.get(key)
+
+      if (existing) {
+        existing.total += 1
+        if (item.status === 'COMPLETED') {
+          existing.completed += 1
+        }
+      } else {
+        bucket.set(key, {
+          key,
+          label,
+          total: 1,
+          completed: item.status === 'COMPLETED' ? 1 : 0,
+        })
+      }
+    })
+
+    return Array.from(bucket.values())
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .slice(-6)
+      .map((item) => ({
+        label: item.label,
+        rate: item.total > 0 ? Math.round((item.completed / item.total) * 100) : 0,
+      }))
+  }, [referrals])
 
   const recentCasesColumns: Column<CaseRowData>[] = [
     {
@@ -135,8 +204,11 @@ export default function DashboardPage() {
       key: 'action',
       title: 'ACTION',
       className: 'text-right',
-      render: () => (
-        <button className="text-[11px] font-bold font-label text-blue-900 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 transition-all outline-none">
+      render: (row) => (
+        <button
+          onClick={() => navigate(`/case-manager/cases/${row.rowId}`)}
+          className="text-[11px] font-bold font-label text-blue-900 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 transition-all outline-none"
+        >
           View
         </button>
       )
@@ -233,6 +305,46 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-3 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" /> Referral Volume Trend
+              </h3>
+              <div className="flex items-end gap-2 h-36">
+                {monthlyReferralVolume.map((item) => (
+                  <div key={item.key} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1">
+                    <div className="text-[10px] font-bold text-slate-500">{item.count}</div>
+                    <div
+                      className="w-full rounded-t-md bg-blue-800/80"
+                      style={{ height: `${Math.max(12, Math.round((item.count / monthlyVolumeMax) * 100))}%` }}
+                    />
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-3">Monthly Completion Rate</h3>
+              <div className="space-y-3">
+                {monthlyCompletionRate.map((item) => (
+                  <div key={item.label} className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                      <span>{item.label}</span>
+                      <span>{item.rate}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-emerald-600"
+                        style={{ width: `${item.rate}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* REGIONAL BREAKDOWN */}
           <section className="space-y-2">
             <div className="flex items-center justify-between">
@@ -277,7 +389,6 @@ export default function DashboardPage() {
                 <ChevronRight className="w-4 h-4" />
               </button>
 
-              <ActionBtn onClick={() => navigate('/case-manager/cases')} icon={<FileEdit className="w-4 h-4 text-blue-900 opacity-80" />} label="Continue Draft" />
               <ActionBtn onClick={() => navigate('/case-manager/referrals')} icon={<Send className="w-4 h-4 text-blue-900 opacity-80" />} label="Create Referral" />
               <ActionBtn onClick={() => navigate('/case-manager/referrals')} icon={<Eye className="w-4 h-4 text-blue-900 opacity-80" />} label="View Referrals" />
           </section>
