@@ -11,7 +11,7 @@ import {
   getExistingClientProfile,
   toCaseHealthStatus,
 } from '../../data/unifiedData'
-import { createManagedCase } from '../../data/caseLifecycleStore'
+import { createManagedCase, getManagedCases } from '../../data/caseLifecycleStore'
 
 type ClientType = 'Overseas Filipino Worker' | 'Next of Kin'
 type ClientSource = 'existing' | 'new'
@@ -64,13 +64,20 @@ function composeNameParts(parts: NameParts): string {
 
 function generateTrackingId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let token = ''
+  const usedTrackingIds = new Set(getManagedCases().map((item) => item.caseNo.toUpperCase()))
 
-  for (let i = 0; i < 8; i += 1) {
-    token += chars[Math.floor(Math.random() * chars.length)]
+  while (true) {
+    let token = ''
+
+    for (let i = 0; i < 7; i += 1) {
+      token += chars[Math.floor(Math.random() * chars.length)]
+    }
+
+    const trackingId = `OW-${token}`
+    if (!usedTrackingIds.has(trackingId)) {
+      return trackingId
+    }
   }
-
-  return `OW-${token}`
 }
 
 function generateCaseId(): string {
@@ -249,6 +256,32 @@ export default function NewCasePage() {
       agencyShort: 'N/A',
       agencyName: 'Not yet referred',
       caseNarrative: caseNarrative.trim(),
+      ofwProfile: {
+        fullName: clientName,
+        birthDate: ofwBirthDate,
+        gender: ofwGender,
+        email: ofwEmail,
+        contact: ofwContact,
+        address: { ...ofwAddress },
+        specialCategories: [
+          specialSenior ? 'Senior Citizen' : '',
+          specialPwd ? 'PWD' : '',
+          specialSoloParent ? 'Solo Parent' : '',
+        ].filter(Boolean) as string[],
+      },
+      nextOfKinProfile: hasNextOfKin
+        ? {
+            fullName: composeNameParts(kinNameParts),
+            contact: kinContact,
+            email: kinEmail,
+            address: { ...kinAddress },
+          }
+        : undefined,
+      workHistory: {
+        lastCountry,
+        lastJob: lastJobPosition,
+        arrivalDate,
+      },
     }
 
     createManagedCase(createdCasePayload)

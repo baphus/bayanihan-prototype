@@ -4,22 +4,27 @@ import { Eye } from 'lucide-react'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import {
-  CASE_MANAGER_CASES,
   formatAddressParts,
   formatDisplayDateTime,
   getCaseManagerAgencies,
-  getCaseManagerReferrals,
   getStakeholderServices,
   resolveStakeholderService,
   toCaseHealthStatus,
   type CaseManagerReferral,
 } from '../../data/unifiedData'
+import {
+  createManagedReferral,
+  getManagedCaseById,
+  getManagedLatestMilestone,
+  getManagedReferralsByCaseId,
+  updateManagedCaseOpenClosed,
+  updateManagedCase,
+} from '../../data/caseLifecycleStore'
 import { getReferralActorsForCase } from '../../data/unifiedData'
 import {
   getCaseNarrativeBySeed,
   getClientPersona,
   getSpecialCategories,
-  stableSeed,
   type SpecialCategory,
 } from '../../data/unifiedData'
 
@@ -249,9 +254,10 @@ export default function CaseViewPage(): JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const { caseId } = useParams<{ caseId: string }>()
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const routeState = (location.state ?? {}) as CreatedCaseState
-  const selectedCase = CASE_MANAGER_CASES.find((item) => item.id === caseId)
+  const selectedCase = caseId ? getManagedCaseById(caseId) : undefined
   const createdCaseFromState = routeState.createdCase && routeState.createdCase.id === caseId
     ? routeState.createdCase
     : undefined
@@ -282,88 +288,31 @@ export default function CaseViewPage(): JSX.Element {
   const [isReferAgencyOpen, setIsReferAgencyOpen] = useState(false)
   const [editableClientType, setEditableClientType] = useState(caseRecord.clientType)
   const [editableNarrative, setEditableNarrative] = useState(
-    createdCaseFromState?.caseNarrative?.trim().length
-      ? createdCaseFromState.caseNarrative
-      : getCaseNarrativeBySeed(caseRecord.id),
+    caseRecord.caseNarrative?.trim().length
+      ? caseRecord.caseNarrative
+      : createdCaseFromState?.caseNarrative?.trim().length
+        ? createdCaseFromState.caseNarrative
+        : getCaseNarrativeBySeed(caseRecord.id),
   )
-  const [manualReferralRows, setManualReferralRows] = useState<ReferralRow[]>([])
   const [referAgencyId, setReferAgencyId] = useState('')
   const [referServiceValue, setReferServiceValue] = useState('')
   const [referRemarks, setReferRemarks] = useState('')
   const [referNotes, setReferNotes] = useState('')
 
   const allAgencies = getCaseManagerAgencies()
-  const seed = stableSeed(caseRecord.id)
-  const referralCount = 2 + (seed % 2)
-
-  const selectedAgency = allAgencies.find((agency) => agency.id === caseRecord.agencyId) ?? {
-    id: caseRecord.agencyId,
-    short: caseRecord.agencyShort,
-    name: caseRecord.agencyName,
-    contact: '',
-    email: '',
-    services: [],
-  }
-
-  const additionalAgencies = allAgencies
-    .filter((agency) => agency.id !== selectedAgency.id)
-    .sort((a, b) => a.name.localeCompare(b.name))
-
-  const agencyPool = [
-    selectedAgency,
-    ...additionalAgencies.slice(0, Math.max(0, referralCount - 1)),
-  ]
-
-  const milestonePool = [
-    caseRecord.milestone,
-    'Case Intake',
-    'Verification',
-    'Document Review',
-    'Service Coordination',
-  ]
-
-  const statusPool: ReferralRow['referralStatus'][] = ['PENDING', 'PROCESSING', 'COMPLETED', 'REJECTED']
-  const seededReferrals = getCaseManagerReferrals().filter((referral) => referral.caseId === caseRecord.id)
-
-  const generatedReferralRows: ReferralRow[] = agencyPool.map((agency, index) => {
-    const existingReferral = seededReferrals.find((referral) => referral.agencyId === agency.id)
-    const inferredStatus = statusPool[(seed + index) % statusPool.length]
-    const status = existingReferral?.status ?? (index === 0 ? caseRecord.status : inferredStatus)
-    const dateReferredIso = existingReferral?.createdAt ?? withOffsetMinutes(caseRecord.createdAt, index * 35)
-    const updatedAtIso = existingReferral?.updatedAt ?? withOffsetMinutes(dateReferredIso, 120 + index * 15)
-    const service = existingReferral?.service ?? resolveStakeholderService(agency.id, caseRecord.service)
-    const referralPayload: CaseManagerReferral = existingReferral ?? {
-      id: `${caseRecord.id}-ref-${agency.id}`,
-      caseId: caseRecord.id,
-      caseNo: caseRecord.caseNo,
-      clientName: caseRecord.clientName,
-      service,
-      agencyId: agency.id,
-      agencyName: agency.name,
-      status,
-      createdAt: dateReferredIso,
-      updatedAt: updatedAtIso,
-      remarks: 'Generated from case referral overview.',
-      notes: 'Generated from case referral overview.',
-      documents: [],
-    }
-
-    return {
-      id: `${caseRecord.id}-ref-${agency.id}`,
-      referral: referralPayload,
-      agency: agency.name,
-      referralStatus: status,
-      service,
-      latestMilestone: milestonePool[(seed + index) % milestonePool.length],
-      dateReferred: formatDisplayDateTime(dateReferredIso),
-      dateReferredIso,
-      updatedAtIso,
-    }
-  })
-  const referralRows = useMemo(
-    () => [...generatedReferralRows, ...manualReferralRows],
-    [generatedReferralRows, manualReferralRows],
-  )
+  const referralRows = useMemo(() => {
+    return getManagedReferralsByCaseId(caseRecord.id).map((referral) => ({
+      id: referral.id,
+      referral,
+      agency: referral.agencyName,
+      referralStatus: referral.status,
+      service: referral.service,
+      latestMilestone: getManagedLatestMilestone(referral.id, 'Referral Sent'),
+      dateReferred: formatDisplayDateTime(referral.createdAt),
+      dateReferredIso: referral.createdAt,
+      updatedAtIso: referral.updatedAt,
+    }))
+  }, [caseRecord.id, refreshKey])
   const timeline = buildCaseTimeline(caseRecord.id, caseRecord.createdAt, referralRows)
   const [timelineAgencyFilter, setTimelineAgencyFilter] = useState('ALL')
 
@@ -426,22 +375,10 @@ export default function CaseViewPage(): JSX.Element {
       documents: [],
     }
 
-    setManualReferralRows((prev) => [
-      {
-        id: `${caseRecord.id}-ref-${selectedReferAgency.id}-${Date.now()}`,
-        referral: referralPayload,
-        agency: selectedReferAgency.name,
-        referralStatus: 'PENDING',
-        service: referralPayload.service,
-        latestMilestone: 'Referral Sent',
-        dateReferred: formatDisplayDateTime(nowIso),
-        dateReferredIso: nowIso,
-        updatedAtIso: nowIso,
-      },
-      ...prev,
-    ])
+    createManagedReferral(referralPayload)
 
     setIsReferAgencyOpen(false)
+    setRefreshKey((prev) => prev + 1)
   }
 
   const timelineAgencies = useMemo(() => {
@@ -457,6 +394,17 @@ export default function CaseViewPage(): JSX.Element {
 
     return timeline.filter((item) => item.agency === timelineAgencyFilter)
   }, [timeline, timelineAgencyFilter])
+
+  const saveCaseDetails = () => {
+    updateManagedCase(caseRecord.id, (current) => ({
+      ...current,
+      clientType: editableClientType,
+      caseNarrative: editableNarrative.trim(),
+      updatedAt: new Date().toISOString(),
+    }))
+    setIsEditDetailsOpen(false)
+    setRefreshKey((prev) => prev + 1)
+  }
 
   const referralColumns: Column<ReferralRow>[] = [
     {
@@ -550,9 +498,13 @@ export default function CaseViewPage(): JSX.Element {
           </button>
           <button
             type="button"
+            onClick={() => {
+              updateManagedCaseOpenClosed(caseRecord.id, caseStatus === 'OPEN' ? 'CLOSED' : 'OPEN')
+              setRefreshKey((prev) => prev + 1)
+            }}
             className="px-3 min-h-[32px] bg-[#0b5384] text-white hover:bg-[#09416a] text-[12px] font-bold rounded-[3px] transition-colors border border-[#0b5384]"
           >
-            Close Case
+            {caseStatus === 'OPEN' ? 'Close Case' : 'Reopen Case'}
           </button>
         </div>
       </div>
@@ -691,7 +643,7 @@ export default function CaseViewPage(): JSX.Element {
                   return (
                     <div key={item.id} className="relative flex items-start gap-3">
                       <div className="mt-0.5 -ml-[18px] h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm z-10">
-                        <img src={logoSrc} alt="Timeline source" className="h-full w-full object-cover" />
+                        <img src={logoSrc} alt="Timeline source" className="h-full w-full object-contain p-[1px]" />
                       </div>
                       <div>
                         <p className="text-[11px] leading-5 font-semibold text-slate-700">{item.title}</p>
@@ -751,7 +703,7 @@ export default function CaseViewPage(): JSX.Element {
               </button>
               <button
                 type="button"
-                onClick={() => setIsEditDetailsOpen(false)}
+                onClick={saveCaseDetails}
                 className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white"
               >
                 Save Changes

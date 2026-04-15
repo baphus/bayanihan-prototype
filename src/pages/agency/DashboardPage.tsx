@@ -250,7 +250,7 @@ function ActivityItem({ title, desc, time, logoSrc }: { title: string; desc: str
   return (
     <div className="relative flex items-start gap-3">
       <div className="mt-0.5 -ml-[18px] h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm z-10">
-        <img src={logoSrc} alt="Activity source" className="h-full w-full object-cover" />
+        <img src={logoSrc} alt="Activity source" className="h-full w-full object-contain p-[1px]" />
       </div>
       <div>
         <p className="text-[11px] leading-5 font-semibold text-slate-700">{title}</p>

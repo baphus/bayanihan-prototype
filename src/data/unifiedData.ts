@@ -245,6 +245,14 @@ export function getReferralActorsForCase(caseId: string): {
   }
 }
 
+export function getAgencyFocalByAgencyId(agencyId: string): ReferralActor {
+  const agencyFocal = REFERRAL_ACTORS.agencyFocals[
+    computeStableIndex(agencyId, REFERRAL_ACTORS.agencyFocals.length)
+  ]
+
+  return agencyFocal
+}
+
 export function getReferralCaseById(id: string): SharedReferralCase | undefined {
   return REFERRAL_CASES.find((item) => item.id === id)
 }
@@ -657,6 +665,27 @@ export type CaseManagerCase = SharedReferralCase & {
   agencyId: string
   agencyShort: string
   agencyName: string
+  caseNarrative?: string
+  ofwProfile?: {
+    fullName: string
+    birthDate: string
+    gender: string
+    email: string
+    contact: string
+    address: AddressParts
+    specialCategories: string[]
+  }
+  nextOfKinProfile?: {
+    fullName: string
+    contact: string
+    email: string
+    address: AddressParts
+  }
+  workHistory?: {
+    lastCountry: string
+    lastJob: string
+    arrivalDate: string
+  }
 }
 
 export type CaseManagerReferral = {
@@ -799,6 +828,10 @@ function toRecipientEmail(clientName: string): string {
 export function buildAgencyActivityLogs(): OversightActivityLog[] {
   return REFERRAL_CASES.flatMap((item) => {
     const actors = getReferralActorsForCase(item.id)
+    const linkedManagedCase = CASE_MANAGER_CASES.find((caseItem) => caseItem.caseNo === item.caseNo)
+    const agencyFocal = linkedManagedCase
+      ? getAgencyFocalByAgencyId(linkedManagedCase.agencyId)
+      : actors.agencyFocal
 
     const assignedLog: OversightActivityLog = {
       id: `agency-${item.id}-assigned`,
@@ -818,8 +851,8 @@ export function buildAgencyActivityLogs(): OversightActivityLog[] {
       caseNo: item.caseNo,
       clientName: item.clientName,
       activityType: 'MILESTONE_UPDATED',
-      actor: actors.agencyFocal.name,
-      actorRole: actors.agencyFocal.role,
+      actor: agencyFocal.name,
+      actorRole: agencyFocal.role,
       channel: 'Portal',
       status: item.status === 'REJECTED' ? 'PROCESSING' : item.status,
       timestamp: item.updatedAt,
@@ -835,8 +868,8 @@ export function buildAgencyActivityLogs(): OversightActivityLog[] {
       caseNo: item.caseNo,
       clientName: item.clientName,
       activityType: getStatusActivityType(item.status),
-      actor: actors.agencyFocal.name,
-      actorRole: actors.agencyFocal.role,
+      actor: agencyFocal.name,
+      actorRole: agencyFocal.role,
       channel: 'Portal',
       status: item.status,
       timestamp: item.updatedAt,
@@ -851,6 +884,7 @@ export function buildAgencyActivityLogs(): OversightActivityLog[] {
 export function buildCaseManagerOversightActivityLogs(): OversightActivityLog[] {
   return CASE_MANAGER_CASES.flatMap((item) => {
     const actors = getReferralActorsForCase(item.id)
+    const agencyFocal = getAgencyFocalByAgencyId(item.agencyId)
 
     const assignedLog: OversightActivityLog = {
       id: `cm-${item.id}-assigned`,
@@ -896,8 +930,8 @@ export function buildCaseManagerOversightActivityLogs(): OversightActivityLog[] 
       caseNo: item.caseNo,
       clientName: item.clientName,
       activityType: 'MILESTONE_UPDATED',
-      actor: actors.agencyFocal.name,
-      actorRole: actors.agencyFocal.role,
+      actor: agencyFocal.name,
+      actorRole: agencyFocal.role,
       channel: 'Portal',
       status: item.status === 'REJECTED' ? 'PROCESSING' : item.status,
       timestamp: item.updatedAt,
@@ -913,8 +947,8 @@ export function buildCaseManagerOversightActivityLogs(): OversightActivityLog[] 
       caseNo: item.caseNo,
       clientName: item.clientName,
       activityType: getStatusActivityType(item.status),
-      actor: actors.agencyFocal.name,
-      actorRole: actors.agencyFocal.role,
+      actor: agencyFocal.name,
+      actorRole: agencyFocal.role,
       channel: 'Portal',
       status: item.status,
       timestamp: addMinutesToIso(item.updatedAt, 20),
@@ -953,6 +987,7 @@ export function buildSystemAdminOversightActivityLogs(): OversightActivityLog[] 
 
   const lifecycleLogs = CASE_MANAGER_CASES.flatMap((item) => {
     const actors = getReferralActorsForCase(item.id)
+    const agencyFocal = getAgencyFocalByAgencyId(item.agencyId)
 
     const assignedLog: OversightActivityLog = {
       id: `sa-${item.id}-assigned`,
@@ -991,8 +1026,8 @@ export function buildSystemAdminOversightActivityLogs(): OversightActivityLog[] 
       recordId: item.caseNo,
       entity: 'cases',
       activityType: getStatusActivityType(item.status),
-      actor: item.status === 'PENDING' ? actors.caseManager.name : actors.agencyFocal.name,
-      actorRole: item.status === 'PENDING' ? actors.caseManager.role : actors.agencyFocal.role,
+      actor: item.status === 'PENDING' ? actors.caseManager.name : agencyFocal.name,
+      actorRole: item.status === 'PENDING' ? actors.caseManager.role : agencyFocal.role,
       channel: 'Portal',
       status: item.status,
       timestamp: item.updatedAt,

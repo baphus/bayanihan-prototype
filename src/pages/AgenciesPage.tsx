@@ -29,8 +29,8 @@ export default function AgenciesPage() {
                 onClick={() => navigate(`/agencies/${agency.id}`)}
               >
                 <div className="flex flex-col items-center justify-center text-center mb-3">
-                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-none bg-surface-container-lowest shadow-sm mb-3 border border-outline-variant/30 transition-transform duration-300 group-hover:scale-105">
-                    <img src={agency.logoUrl} alt={`${agency.short} Logo`} className="h-full w-full object-cover p-1" />
+                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-surface-container-lowest shadow-sm mb-3 border border-outline-variant/30 transition-transform duration-300 group-hover:scale-105">
+                    <img src={agency.logoUrl} alt={`${agency.short} Logo`} className="h-full w-full object-contain p-1" />
                   </div>
                   <h2 className="font-headline text-sm font-bold text-primary leading-tight h-10 flex items-center justify-center">
                     {agency.name}
@@ -69,7 +69,7 @@ export default function AgenciesPage() {
                     type="button" 
                     variant="outline" 
                     size="md"
-                    className="w-full mt-auto rounded-none border-primary text-primary hover:bg-primary hover:text-white transition-colors text-[10px] py-2"
+                    className="w-full mt-auto rounded-none border-primary text-primary hover:!bg-primary hover:!text-white transition-colors text-[10px] py-2"
                     onClick={(e) => {
                       e.stopPropagation();
                       navigate(`/agencies/${agency.id}`)

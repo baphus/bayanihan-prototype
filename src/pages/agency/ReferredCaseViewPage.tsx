@@ -3,10 +3,17 @@ import type { JSX, ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass } from './statusBadgeStyles'
-import { REFERRAL_CASES } from '../../data/unifiedData'
 import { getCaseNarrativeBySeed } from '../../data/unifiedData'
 import { getCaseAgency } from '../../data/unifiedData'
-import { formatAddressParts, getClientPersona, type AddressParts } from '../../data/unifiedData'
+import { formatAddressParts, getAgencyFocalByAgencyId, getClientPersona, getSpecialCategories, type AddressParts } from '../../data/unifiedData'
+import {
+  addManagedReferralMilestone,
+  getManagedCaseById,
+  getManagedLatestMilestone,
+  getManagedReferralById,
+  getManagedReferralMilestones,
+  updateManagedReferralStatus,
+} from '../../data/caseLifecycleStore'
 
 type CaseStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
 type ClientType = 'Next of Kin' | 'Overseas Filipino Worker'
@@ -15,10 +22,10 @@ type UserRole = 'Agency Focal' | 'Case Manager' | 'System Admin' | 'OFW'
 
 type DetailCase = {
   id: string
+  agencyId: string
   caseNo: string
   clientType: ClientType
   service: string
-  milestone: string
   status: CaseStatus
   dateReceived: string
   dateUpdated: string
@@ -39,18 +46,6 @@ type DetailCase = {
   requiredServices: string[]
 }
 
-type CaseSeed = {
-  id: string
-  caseNo: string
-  clientName: string
-  clientType: ClientType
-  service: string
-  milestone: string
-  status: CaseStatus
-  dateReceived: string
-  dateUpdated: string
-}
-
 type TimelineItem = {
   id: string
   agency: string
@@ -61,9 +56,13 @@ type TimelineItem = {
   logoSrc: string
 }
 
-const AGENCY_ACTOR = 'Agency Focal - Marychris M. Relon'
 const CURRENT_USER_ROLE: UserRole = 'Agency Focal'
 const BAYANIHAN_LOGO = '/logo.png'
+
+function getAgencyActorLabel(agencyId: string): string {
+  const focal = getAgencyFocalByAgencyId(agencyId)
+  return `Agency Focal - ${focal.name}`
+}
 
 function isAcceptedStatus(status: CaseStatus): boolean {
   return status === 'PROCESSING' || status === 'COMPLETED'
@@ -83,62 +82,42 @@ function formatIsoToDisplayDate(iso: string): string {
   })
 }
 
-const CASE_SEEDS: CaseSeed[] = REFERRAL_CASES.map((item) => ({
-  id: item.id,
-  caseNo: item.caseNo,
-  clientName: item.clientName,
-  clientType: item.clientType,
-  service: item.service,
-  milestone: item.milestone,
-  status: item.status,
-  dateReceived: formatIsoToDisplayDate(item.createdAt),
-  dateUpdated: formatIsoToDisplayDate(item.updatedAt),
-}))
-
-const CASES: DetailCase[] = CASE_SEEDS.map((seed, index) => {
-  const kinName = `Kin of ${seed.clientName.split(',')[0]}`
-  const contact = `+63 917 123 45${(index + 10).toString().slice(-2)}`
-  const persona = getClientPersona(seed.id)
-  const specialCategories: SpecialCategory[] = []
-
-  if (index % 5 === 0) {
-    specialCategories.push('Senior Citizen')
+function buildDetailCase(referralId: string): DetailCase | null {
+  const referral = getManagedReferralById(referralId)
+  if (!referral) {
+    return null
   }
 
-  if (index % 4 === 0) {
-    specialCategories.push('PWD')
-  }
-
-  if (index % 6 === 0) {
-    specialCategories.push('Solo Parent')
-  }
+  const linkedCase = getManagedCaseById(referral.caseId)
+  const persona = getClientPersona(referral.caseNo)
+  const contact = persona.ofwContact
 
   return {
-    id: seed.id,
-    caseNo: seed.caseNo,
-    clientType: seed.clientType,
-    service: seed.service,
-    milestone: seed.milestone,
-    status: seed.status,
-    dateReceived: seed.dateReceived,
-    dateUpdated: seed.dateUpdated,
-    ofwFullName: seed.clientName,
+    id: referral.id,
+    agencyId: referral.agencyId,
+    caseNo: referral.caseNo,
+    clientType: linkedCase?.clientType ?? 'Overseas Filipino Worker',
+    service: referral.service,
+    status: referral.status,
+    dateReceived: formatIsoToDisplayDate(referral.createdAt),
+    dateUpdated: formatIsoToDisplayDate(referral.updatedAt),
+    ofwFullName: referral.clientName,
     ofwBirthDate: persona.ofwBirth,
     ofwGender: persona.gender,
-    ofwEmail: `${seed.clientName.toLowerCase().replace(/[^a-z]/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '')}@email.ph`,
+    ofwEmail: persona.ofwEmail,
     ofwContact: contact,
     ofwAddress: persona.ofwAddress,
-    nextOfKin: kinName,
-    kinContact: contact,
-    kinEmail: `kin.${seed.id.toLowerCase()}@email.ph`,
+    nextOfKin: persona.kinName,
+    kinContact: persona.kinContact,
+    kinEmail: persona.kinEmail,
     kinAddress: persona.kinAddress,
-    lastCountry: ['Saudi Arabia', 'Qatar', 'UAE', 'Kuwait'][index % 4],
-    lastJob: ['Construction Supervisor', 'Caregiver', 'Machine Operator', 'Domestic Worker'][index % 4],
-    arrivalDate: `Oct ${String((index % 28) + 1).padStart(2, '0')}, 2023`,
-    specialCategories,
-    requiredServices: [seed.service],
+    lastCountry: persona.lastCountry,
+    lastJob: persona.lastJob,
+    arrivalDate: persona.arrivalDate,
+    specialCategories: getSpecialCategories(referral.caseNo),
+    requiredServices: [referral.service],
   }
-})
+}
 
 function buildDocuments(caseData: DetailCase): CaseDocument[] {
   const serviceKey = caseData.service.toLowerCase().replace(/[^a-z]/g, '_')
@@ -161,6 +140,7 @@ function nowLabel(): string {
 }
 
 function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agencyName: string): TimelineItem[] {
+  const agencyActor = getAgencyActorLabel(caseData.agencyId)
   const timeline: TimelineItem[] = [
     {
       id: `${caseData.caseNo}-received`,
@@ -173,18 +153,6 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
     },
   ]
 
-  if (isAcceptedStatus(caseData.status)) {
-    timeline.push({
-      id: `${caseData.caseNo}-initial-milestone`,
-      agency: agencyName,
-      title: `Milestone: "${caseData.milestone}"`,
-      description: `Tracking started for ${caseData.service.toLowerCase()}.`,
-      time: `${caseData.dateReceived}, 10:10 AM`,
-      actor: AGENCY_ACTOR,
-      logoSrc: agencyLogoSrc,
-    })
-  }
-
   if (caseData.status === 'PROCESSING') {
     timeline.push({
       id: `${caseData.caseNo}-processing`,
@@ -192,7 +160,7 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
       title: 'Referral was accepted. Remarks: Initial validation completed.',
       description: 'Status moved to PROCESSING by agency focal.',
       time: `${caseData.dateUpdated}, 09:20 AM`,
-      actor: AGENCY_ACTOR,
+      actor: agencyActor,
       logoSrc: agencyLogoSrc,
     })
   }
@@ -205,7 +173,7 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
         title: 'Referral was accepted. Remarks: Initial validation completed.',
         description: 'Status moved to PROCESSING by agency focal.',
         time: `${caseData.dateReceived}, 09:20 AM`,
-        actor: AGENCY_ACTOR,
+        actor: agencyActor,
         logoSrc: agencyLogoSrc,
       },
       {
@@ -214,7 +182,7 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
         title: 'Referral was completed. Remarks: Service delivered successfully.',
         description: 'Case resolution was recorded by agency focal.',
         time: `${caseData.dateUpdated}, 04:10 PM`,
-        actor: AGENCY_ACTOR,
+        actor: agencyActor,
         logoSrc: agencyLogoSrc,
       },
     )
@@ -227,7 +195,7 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
       title: 'Referral was rejected. Remarks: Incomplete requirements submitted.',
       description: 'Case was returned for correction and re-submission.',
       time: `${caseData.dateUpdated}, 02:45 PM`,
-      actor: AGENCY_ACTOR,
+      actor: agencyActor,
       logoSrc: agencyLogoSrc,
     })
   }
@@ -238,7 +206,10 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
 export default function ReferredCaseViewPage(): JSX.Element {
   const navigate = useNavigate()
   const { caseId } = useParams<{ caseId: string }>()
-  const selectedCase = CASES.find((entry) => entry.id === caseId)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [renderKey, setRenderKey] = useState(0)
+  
+  const selectedCase = caseId ? buildDetailCase(caseId) : null
 
   const [currentStatus, setCurrentStatus] = useState<CaseStatus>('PENDING')
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -260,27 +231,67 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const agencyLogoSrc = selectedAgency?.logoUrl ?? BAYANIHAN_LOGO
   const canAddMilestone = isAcceptedStatus(currentStatus) && CURRENT_USER_ROLE === 'Agency Focal'
 
+  // Force state reset when caseId changes - use explicit dependency on caseId
   useEffect(() => {
-    if (selectedCase) {
-      setCurrentStatus(selectedCase.status)
-      setTimeline(buildInitialTimeline(selectedCase, agencyLogoSrc, agencyName))
-    }
-  }, [selectedCase, agencyLogoSrc, agencyName])
+    setCurrentStatus('PENDING')
+    setTimeline([])
+    setPendingDecision(null)
+    setDecisionRemark('')
+    setIsMilestoneModalOpen(false)
+    setMilestoneTitle('')
+    setMilestoneDescription('')
+    setIsUpdateStatusModalOpen(false)
+    setStatusRemark('')
+    setRefreshKey(0)
+    setRenderKey((prev) => prev + 1) // Force a re-render
+  }, [caseId])
 
-  const pushTimelineEntry = (entry: { title: string; description: string; actor?: string; logoSrc?: string; agency?: string }) => {
-    setTimeline((prev) => [
-      ...prev,
-      {
-        id: `evt-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-        agency: entry.agency ?? agencyName,
+  // Load case data fresh whenever caseId changes
+  useEffect(() => {
+    if (!caseId) {
+      return
+    }
+
+    const freshCase = buildDetailCase(caseId)
+    if (freshCase) {
+      const agencyActor = getAgencyActorLabel(freshCase.agencyId)
+      const milestoneEntries = getManagedReferralMilestones(freshCase.id)
+      const milestoneTimeline: TimelineItem[] = milestoneEntries.map((item) => ({
+        id: `milestone-${item.id}`,
+        agency: freshCase.id ? (getCaseAgency(freshCase.id)?.name ?? 'Agency') : 'Agency',
+        title: `Milestone: "${item.title}"`,
+        description: item.description,
         time: nowLabel(),
-        title: entry.title,
-        description: entry.description,
-        actor: entry.actor ?? AGENCY_ACTOR,
-        logoSrc: entry.logoSrc ?? agencyLogoSrc,
-      },
-    ])
-  }
+        actor: item.actor === 'Agency Focal' ? agencyActor : item.actor,
+        logoSrc: freshCase.id ? (getCaseAgency(freshCase.id)?.logoUrl ?? BAYANIHAN_LOGO) : BAYANIHAN_LOGO,
+      }))
+
+      setCurrentStatus(freshCase.status)
+      const agencyLogoSrc = freshCase.id ? (getCaseAgency(freshCase.id)?.logoUrl ?? BAYANIHAN_LOGO) : BAYANIHAN_LOGO
+      const agencyName = freshCase.id ? (getCaseAgency(freshCase.id)?.name ?? 'Agency') : 'Agency'
+      setTimeline([...buildInitialTimeline(freshCase, agencyLogoSrc, agencyName), ...milestoneTimeline])
+    }
+  }, [caseId, refreshKey])
+
+  // Update timeline when refreshKey changes for milestone/status updates
+  useEffect(() => {
+    if (selectedCase && refreshKey > 0) {
+      const agencyActor = getAgencyActorLabel(selectedCase.agencyId)
+      const milestoneEntries = getManagedReferralMilestones(selectedCase.id)
+      const milestoneTimeline: TimelineItem[] = milestoneEntries.map((item) => ({
+        id: `milestone-${item.id}`,
+        agency: agencyName,
+        title: `Milestone: "${item.title}"`,
+        description: item.description,
+        time: nowLabel(),
+        actor: item.actor === 'Agency Focal' ? agencyActor : item.actor,
+        logoSrc: agencyLogoSrc,
+      }))
+
+      setCurrentStatus(selectedCase.status)
+      setTimeline([...buildInitialTimeline(selectedCase, agencyLogoSrc, agencyName), ...milestoneTimeline])
+    }
+  }, [selectedCase, agencyLogoSrc, agencyName, refreshKey, renderKey])
 
   if (!selectedCase) {
     return (
@@ -474,7 +485,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
                 {timeline.map((item) => (
                   <div key={item.id} className="relative flex items-start gap-3">
                     <div className="mt-0.5 -ml-[18px] h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm z-10">
-                      <img src={item.logoSrc} alt="Timeline source" className="h-full w-full object-cover" />
+                      <img src={item.logoSrc} alt="Timeline source" className="h-full w-full object-contain p-[1px]" />
                     </div>
                     <div>
                       <p className="text-[11px] leading-5 font-semibold text-slate-700">{item.title}</p>
@@ -524,17 +535,8 @@ export default function ReferredCaseViewPage(): JSX.Element {
             }
 
             setCurrentStatus(pendingDecision)
-            if (pendingDecision === 'PROCESSING') {
-              pushTimelineEntry({
-                title: `Referral was accepted. Remarks: ${trimmed}`,
-                description: 'Status moved to PROCESSING by agency focal.',
-              })
-            } else {
-              pushTimelineEntry({
-                title: `Referral was rejected. Remarks: ${trimmed}`,
-                description: 'Status moved to REJECTED by agency focal.',
-              })
-            }
+            updateManagedReferralStatus(selectedCase.id, pendingDecision, trimmed)
+            setRefreshKey((prev) => prev + 1)
 
             setPendingDecision(null)
             setDecisionRemark('')
@@ -565,10 +567,8 @@ export default function ReferredCaseViewPage(): JSX.Element {
               return
             }
 
-            pushTimelineEntry({
-              title: `Milestone: "${title}"`,
-              description,
-            })
+            addManagedReferralMilestone(selectedCase.id, title, description)
+            setRefreshKey((prev) => prev + 1)
 
             setIsMilestoneModalOpen(false)
             setMilestoneTitle('')
@@ -594,19 +594,8 @@ export default function ReferredCaseViewPage(): JSX.Element {
             }
 
             setCurrentStatus(nextStatus)
-            const label =
-              nextStatus === 'REJECTED'
-                ? 'Referral was rejected'
-                : nextStatus === 'COMPLETED'
-                  ? 'Referral was completed'
-                  : nextStatus === 'PROCESSING'
-                    ? 'Referral was accepted'
-                    : 'Referral was set to pending'
-
-            pushTimelineEntry({
-              title: `${label}. Remarks: ${trimmed}`,
-              description: `Status updated to ${nextStatus} by agency focal.`,
-            })
+            updateManagedReferralStatus(selectedCase.id, nextStatus, trimmed)
+            setRefreshKey((prev) => prev + 1)
 
             setIsUpdateStatusModalOpen(false)
             setStatusRemark('')

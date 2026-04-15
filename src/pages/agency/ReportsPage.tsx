@@ -3,29 +3,18 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass } from './statusBadgeStyles'
-import { REFERRAL_CASES } from '../../data/unifiedData'
+import { getManagedLatestUpdate, getManagedReferrals } from '../../data/caseLifecycleStore'
 
 type ReferredCase = {
   id: string
   caseNo: string
   clientName: string
   service: string
-  milestone: string
+  latestUpdate: string
   createdOn: string
   completedOn?: string
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
 }
-
-const referredCases: ReferredCase[] = REFERRAL_CASES.map((item) => ({
-  id: item.id,
-  caseNo: item.caseNo,
-  clientName: item.clientName,
-  service: item.service,
-  milestone: item.milestone,
-  createdOn: item.createdAt.slice(0, 10),
-  completedOn: item.status === 'COMPLETED' ? item.updatedAt.slice(0, 10) : undefined,
-  status: item.status,
-}))
 
 type TrendGranularity = 'day' | 'week' | 'month' | 'year'
 
@@ -238,6 +227,17 @@ export default function ReportsPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'>('ALL')
 
+  const referredCases: ReferredCase[] = getManagedReferrals().map((item) => ({
+    id: item.id,
+    caseNo: item.caseNo,
+    clientName: item.clientName,
+    service: item.service,
+    latestUpdate: getManagedLatestUpdate(item.id),
+    createdOn: item.createdAt.slice(0, 10),
+    completedOn: item.status === 'COMPLETED' ? item.updatedAt.slice(0, 10) : undefined,
+    status: item.status,
+  }))
+
   const activeFromDate = useMemo(() => toCalendarDate(fromDateISO), [fromDateISO])
   const activeToDate = useMemo(() => toCalendarDate(toDateISO), [toDateISO])
 
@@ -257,7 +257,7 @@ export default function ReportsPage() {
     }
 
     return dateRangeCases.filter((row) => {
-      const searchable = [row.caseNo, row.clientName, row.service, row.milestone].join(' ').toLowerCase()
+      const searchable = [row.caseNo, row.clientName, row.service, row.latestUpdate].join(' ').toLowerCase()
       return searchable.includes(query)
     })
   }, [dateRangeCases, searchValue])
@@ -353,6 +353,50 @@ export default function ReportsPage() {
     return { name, count, share }
   }, [dateRangeCases])
 
+  const averageTimeInsight = useMemo(() => {
+    const selectedAvg = kpiData.averageDays
+    const rangeDays = Math.max(1, differenceInDays(activeFromDate, activeToDate) + 1)
+    const previousTo = addDays(activeFromDate, -1)
+    const previousFrom = addDays(previousTo, -(rangeDays - 1))
+
+    const previousRangeCases = referredCases.filter((row) => {
+      const created = toCalendarDate(row.createdOn)
+      return created >= previousFrom && created <= previousTo
+    })
+
+    const previousDurations = previousRangeCases
+      .filter((row) => row.status === 'COMPLETED' && row.completedOn)
+      .map((row) => {
+        const start = toCalendarDate(row.createdOn).getTime()
+        const end = toCalendarDate(row.completedOn as string).getTime()
+        return (end - start) / DAY_MS
+      })
+
+    const previousAvg =
+      previousDurations.length > 0
+        ? previousDurations.reduce((sum, value) => sum + value, 0) / previousDurations.length
+        : 0
+
+    if (selectedAvg === 0) {
+      return 'No completed referrals in selected range.'
+    }
+
+    if (previousAvg === 0) {
+      return 'No completed referrals in previous period for comparison.'
+    }
+
+    const deltaPercent = Math.abs(((selectedAvg - previousAvg) / previousAvg) * 100)
+    if (selectedAvg < previousAvg) {
+      return `Improved by ${deltaPercent.toFixed(1)}% vs previous period.`
+    }
+
+    if (selectedAvg > previousAvg) {
+      return `Slower by ${deltaPercent.toFixed(1)}% vs previous period.`
+    }
+
+    return 'No change vs previous period.'
+  }, [activeFromDate, activeToDate, kpiData.averageDays])
+
   const activeFilters: FilterChip[] = useMemo(() => {
     if (statusFilter === 'ALL') {
       return []
@@ -385,9 +429,9 @@ export default function ReportsPage() {
       render: (row) => <span className="text-[12px] text-slate-700">{row.service}</span>,
     },
     {
-      key: 'milestone',
-      title: 'MILESTONE',
-      render: (row) => <span className="text-[12px] text-slate-600">{row.status === 'PENDING' ? '---' : row.milestone}</span>,
+      key: 'latestUpdate',
+      title: 'LATEST UPDATE',
+      render: (row) => <span className="text-[12px] text-slate-600">{row.latestUpdate}</span>,
     },
     {
       key: 'status',
@@ -470,7 +514,12 @@ export default function ReportsPage() {
           accent="border-l-[#9a5b1a]"
           valueTone="text-[#9a5b1a]"
         />
-        <MetricCard label="Avg Time (days)" value={kpiData.averageDays.toFixed(1)} accent="border-l-[#0b5a8c]" />
+        <MetricCard
+          label="Avg Completion Time (days)"
+          value={kpiData.averageDays.toFixed(1)}
+          accent="border-l-[#0b5a8c]"
+          description="Calculated from Referral Sent to Referral Completion"
+        />
         <MetricCard
           label="Completion Rate"
           value={`${Math.round(kpiData.completionRate)}%`}
@@ -567,8 +616,9 @@ export default function ReportsPage() {
           </div>
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#0f7f7c]">Average Time Per Referral</p>
-            <p className="text-3xl font-black leading-tight">4.2 Days</p>
-            <p className="text-[13px] text-[#0f7f7c]">Improving 14% month-over-month</p>
+            <p className="text-3xl font-black leading-tight">{kpiData.averageDays.toFixed(1)} Days</p>
+            <p className="text-[13px] text-[#0f7f7c]">Calculated from Referral Sent to Referral Completion</p>
+            <p className="text-[11px] text-[#0f7f7c]">{averageTimeInsight}</p>
           </div>
           <TrendingUp className="ml-auto h-5 w-5 opacity-70" />
         </article>
@@ -588,7 +638,7 @@ export default function ReportsPage() {
           data={filteredCases}
           columns={columns}
           keyExtractor={(row) => row.id}
-          searchPlaceholder="Search case no, client, service, milestone..."
+          searchPlaceholder="Search case no, client, service, latest update..."
           searchValue={searchValue}
           onSearchChange={setSearchValue}
           onAdvancedFilters={() => setIsFilterOpen((prev) => !prev)}
@@ -636,12 +686,14 @@ function MetricCard({
   label,
   value,
   accent,
+  description,
   valueTone,
   trailing,
 }: {
   label: string
   value: string
   accent: string
+  description?: string
   valueTone?: string
   trailing?: ReactNode
 }) {
@@ -652,6 +704,7 @@ function MetricCard({
         <p className={`text-[33px] font-black leading-none text-[#0f172a] ${valueTone ?? ''}`}>{value}</p>
         {trailing}
       </div>
+      {description ? <p className="mt-1 text-[10px] font-semibold text-slate-500">{description}</p> : null}
     </article>
   )
 }

@@ -4,29 +4,29 @@ import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
 import {
-  CASE_MANAGER_CASES,
   formatDisplayDateTime,
   getCaseManagerAgencies,
-  getCaseManagerReferrals,
   getCaseNarrativeBySeed,
   getStakeholderServices,
   resolveStakeholderService,
   toCaseHealthStatus,
   type CaseManagerReferral,
 } from '../../data/unifiedData'
+import { createManagedReferral, getManagedCases, getManagedReferrals } from '../../data/caseLifecycleStore'
 
 type StatusFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
 
 export default function ReferralsPage() {
   const navigate = useNavigate()
+  const [refreshKey, setRefreshKey] = useState(0)
   const agencies = useMemo(() => getCaseManagerAgencies(), [])
   const openCases = useMemo(
-    () => CASE_MANAGER_CASES.filter((item) => toCaseHealthStatus(item.status) === 'OPEN'),
-    [],
+    () => getManagedCases().filter((item) => toCaseHealthStatus(item.status) === 'OPEN'),
+    [refreshKey],
   )
   const initialCase = openCases[0]
   const initialAgencyId = initialCase?.agencyId ?? agencies[0]?.id ?? ''
-  const [rows, setRows] = useState<CaseManagerReferral[]>(() => getCaseManagerReferrals())
+  const rows = useMemo<CaseManagerReferral[]>(() => getManagedReferrals(), [refreshKey])
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
@@ -201,11 +201,12 @@ export default function ReferralsPage() {
       documents: docs,
     }
 
-    setRows((prev) => [newRow, ...prev])
+    createManagedReferral(newRow)
     closeCreateWizard()
     setRemarksValue('')
     setNotesValue('')
     setUploadedDocuments([])
+    setRefreshKey((prev) => prev + 1)
   }
 
   return (

@@ -4,16 +4,15 @@ import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/
 import { useNavigate } from 'react-router-dom'
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass } from './statusBadgeStyles'
-import { REFERRAL_CASES } from '../../data/unifiedData'
+import { getManagedLatestUpdate, getManagedReferrals, updateManagedReferralStatus } from '../../data/caseLifecycleStore'
 
 type ReferredCase = {
   id: string
   caseNo: string
   clientName: string
   service: string
-  milestone: string
+  latestUpdate: string
   createdOn: string
-  updatedOn: string
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
 }
 
@@ -27,17 +26,6 @@ function formatIsoToTableTimestamp(iso: string): string {
   const second = `${date.getSeconds()}`.padStart(2, '0')
   return `${year}-${month}-${day} ${hour}:${minute}:${second}`
 }
-
-const initialMockData: ReferredCase[] = REFERRAL_CASES.map((item) => ({
-  id: item.id,
-  caseNo: item.caseNo,
-  clientName: item.clientName,
-  service: item.service,
-  milestone: item.milestone,
-  createdOn: formatIsoToTableTimestamp(item.createdAt),
-  updatedOn: formatIsoToTableTimestamp(item.updatedAt),
-  status: item.status,
-}))
 
 function formatTimestamp(timestamp: string): string {
   const parsed = new Date(timestamp.replace(' ', 'T'))
@@ -58,7 +46,7 @@ function formatTimestamp(timestamp: string): string {
 
 export default function ReferredCasesPage(): JSX.Element {
   const navigate = useNavigate()
-  const [data, setData] = useState<ReferredCase[]>(initialMockData)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [searchValue, setSearchValue] = useState('')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
@@ -68,9 +56,8 @@ export default function ReferredCasesPage(): JSX.Element {
     caseNo: true,
     clientName: true,
     service: true,
-    milestone: true,
+    latestUpdate: true,
     createdOn: true,
-    updatedOn: true,
     status: true,
     actions: true
   })
@@ -80,20 +67,22 @@ export default function ReferredCasesPage(): JSX.Element {
   const [pendingDecision, setPendingDecision] = useState<{ id: string; action: 'Accept' | 'Reject' } | null>(null)
   const [decisionRemark, setDecisionRemark] = useState('')
 
-  const handleAction = (id: string, action: 'Accept' | 'Reject', remark: string) => {
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
-
-    setData(prev => prev.map(item => {
-      if (item.id === id) {
-        if (action === 'Accept') {
-          return { ...item, status: 'PROCESSING', updatedOn: now }
-        }
-        if (action === 'Reject') {
-          return { ...item, status: 'REJECTED', updatedOn: now, milestone: `Rejected: ${remark}` }
-        }
-      }
-      return item
+  const data = useMemo<ReferredCase[]>(() => {
+    return getManagedReferrals().map((item) => ({
+      id: item.id,
+      caseNo: item.caseNo,
+      clientName: item.clientName,
+      service: item.service,
+      latestUpdate: getManagedLatestUpdate(item.id),
+      createdOn: formatIsoToTableTimestamp(item.createdAt),
+      status: item.status,
     }))
+  }, [refreshKey])
+
+  const handleAction = (id: string, action: 'Accept' | 'Reject', remark: string) => {
+    const nextStatus = action === 'Accept' ? 'PROCESSING' : 'REJECTED'
+    updateManagedReferralStatus(id, nextStatus, remark)
+    setRefreshKey((prev) => prev + 1)
   }
 
   const requestDecision = (id: string, action: 'Accept' | 'Reject') => {
@@ -141,24 +130,17 @@ export default function ReferredCasesPage(): JSX.Element {
       )
     },
     {
-      key: 'milestone',
-      title: 'MILESTONE',
+      key: 'latestUpdate',
+      title: 'LATEST UPDATE',
       render: (row) => (
-        <span className="text-[13px] text-slate-700 font-semibold">{row.status === 'PENDING' ? '---' : row.milestone}</span>
+        <span className="text-[13px] text-slate-700 font-semibold">{row.latestUpdate}</span>
       )
     },
     {
       key: 'createdOn',
-      title: 'CREATED ON',
+      title: 'REFERRED ON',
       render: (row) => (
         <span className="text-[13px] text-slate-600 font-medium">{formatTimestamp(row.createdOn)}</span>
-      )
-    },
-    {
-      key: 'updatedOn',
-      title: 'UPDATED ON',
-      render: (row) => (
-        <span className="text-[13px] text-slate-600 font-medium">{formatTimestamp(row.updatedOn)}</span>
       )
     },
     {
@@ -215,17 +197,16 @@ export default function ReferredCasesPage(): JSX.Element {
       const statusFilter = activeFilters.find(f => f.key === 'status')
       const matchesFilters = statusFilter ? row.status === statusFilter.value : true
       
-      return matchesSearch && matchesFilters && row.status !== 'REJECTED'
+      return matchesSearch && matchesFilters
     })
   }, [data, searchValue, activeFilters])
 
   const kpiData = useMemo(() => {
-    const nonRejected = data.filter((row) => row.status !== 'REJECTED')
     return {
-      total: nonRejected.length,
-      pending: nonRejected.filter((row) => row.status === 'PENDING').length,
-      processing: nonRejected.filter((row) => row.status === 'PROCESSING').length,
-      completed: nonRejected.filter((row) => row.status === 'COMPLETED').length,
+      total: data.length,
+      pending: data.filter((row) => row.status === 'PENDING').length,
+      processing: data.filter((row) => row.status === 'PROCESSING').length,
+      completed: data.filter((row) => row.status === 'COMPLETED').length,
     }
   }, [data])
 

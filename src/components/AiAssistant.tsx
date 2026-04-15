@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { REFERRAL_CASES, getReferralCaseByCaseNo } from '../data/unifiedData'
+import { buildFaqList, findFaqByInput } from '../data/faqData'
 
 type ChatSender = 'ai' | 'user'
 type ChatMode = 'idle' | 'awaitingTrackingId'
@@ -18,6 +19,7 @@ const QUICK_PROMPTS = [
   'View milestones',
   'Talk to agency',
   'Inform of agency services',
+  'FAQ',
 ] as const
 
 const EXAMPLE_TRACKING_IDS = REFERRAL_CASES.slice(0, 2).map((item) => item.caseNo)
@@ -192,7 +194,20 @@ export default function AiAssistant({ trackingId }: { trackingId?: string }) {
     if (prompt === 'Talk to agency') {
       return {
         sender: 'ai',
-        text: 'For agency coordination, prepare your Tracking ID and describe your request. I can guide whether your concern should go to OWWA, DMW, or TESDA based on your case stage.',
+        text: 'For case creation, please approach DMW only. If your case already exists, prepare your Tracking ID and I can guide referrals to the right partner agency based on your case stage.',
+      }
+    }
+
+    if (prompt === 'FAQ') {
+      return {
+        sender: 'ai',
+        text: `Here are common questions I can answer:\n${buildFaqList(4)}\n\nYou can also open the FAQ section below.`,
+        links: [
+          {
+            label: 'Open FAQ section',
+            href: '/#faq',
+          },
+        ],
       }
     }
 
@@ -250,6 +265,7 @@ export default function AiAssistant({ trackingId }: { trackingId?: string }) {
       const inputCaseNoMatch = userMessage.text.match(/ow-[a-z0-9]{7}/i)
       const targetCaseNo = inputCaseNoMatch?.[0] ?? trackingId
       const targetCase = targetCaseNo ? getReferralCaseByCaseNo(targetCaseNo) : undefined
+      const matchedFaq = findFaqByInput(userMessage.text)
 
       if (isTrackingId(userMessage.text)) {
         aiResponse = buildCaseSummaryMessage(getReferralCaseByCaseNo(normalizeTrackingId(userMessage.text)))
@@ -274,7 +290,16 @@ export default function AiAssistant({ trackingId }: { trackingId?: string }) {
         lowerInput.includes('service') ||
         lowerInput.includes('assistance')
 
-      if (targetCase && (asksForStatus || asksForMilestone || asksForTimeline || asksForService)) {
+      const asksForCaseCreationAgency =
+        (lowerInput.includes('create') || lowerInput.includes('creation') || lowerInput.includes('new case')) &&
+        (lowerInput.includes('agency') || lowerInput.includes('where') || lowerInput.includes('who'))
+
+      if (asksForCaseCreationAgency) {
+        aiResponse = {
+          sender: 'ai',
+          text: 'For new case creation, DMW is the only agency you should approach. Once created, the case may be referred to other partner agencies as needed.',
+        }
+      } else if (targetCase && (asksForStatus || asksForMilestone || asksForTimeline || asksForService)) {
         const milestoneText =
           targetCase.status === 'PENDING' ? 'No milestone has been added yet for this pending case.' : `Current milestone: ${targetCase.milestone}.`
 
@@ -314,7 +339,18 @@ export default function AiAssistant({ trackingId }: { trackingId?: string }) {
         }
       }
 
-      if (lowerInput.includes('dmw') || lowerInput.includes('contract')) {
+      if (matchedFaq) {
+        aiResponse = {
+          sender: 'ai',
+          text: matchedFaq.answer,
+          links: [
+            {
+              label: 'View full FAQs',
+              href: '/#faq',
+            },
+          ],
+        }
+      } else if (lowerInput.includes('dmw') || lowerInput.includes('contract')) {
         aiResponse = {
           sender: 'ai',
           text: "DMW has completed your contract verification. You can view the full DMW timeline by clicking 'View Milestones' on the DMW card above.",

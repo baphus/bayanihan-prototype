@@ -2,12 +2,12 @@ import { Link, useParams } from 'react-router-dom'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
 import TrackingNotFoundState from '../components/TrackingNotFoundState'
-import { getAgencyMilestonePageData } from '../data/unifiedData'
+import { getManagedAgencyMilestonePageData } from '../data/caseLifecycleStore'
 
 export default function DmwMilestonesPage() {
   const { trackerNumber } = useParams()
   const cleanTrackerNumber = trackerNumber ? decodeURIComponent(trackerNumber).trim() : ''
-  const pageData = cleanTrackerNumber ? getAgencyMilestonePageData('dmw', cleanTrackerNumber) : null
+  const pageData = cleanTrackerNumber ? getManagedAgencyMilestonePageData('dmw', cleanTrackerNumber) : null
 
   if (!pageData) {
     return (

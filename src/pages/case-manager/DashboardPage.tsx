@@ -182,7 +182,7 @@ export default function DashboardPage() {
       render: (row) => (
         <span className="flex items-center gap-1.5 text-xs text-slate-700 font-body">
           <div className="h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm">
-            <img src={row.agencyLogoUrl} alt={row.agencyCode} className="h-full w-full object-cover" />
+            <img src={row.agencyLogoUrl} alt={row.agencyCode} className="h-full w-full object-contain p-[1px]" />
           </div>
           {row.agency}
         </span>
@@ -194,7 +194,7 @@ export default function DashboardPage() {
       render: (row) => (
         <span className="flex items-center gap-1.5 text-xs text-slate-500 font-body">
           <div className="h-3 w-3 overflow-hidden rounded-full border border-white bg-white shadow-sm">
-            <img src={row.agencyLogoUrl} alt={row.agencyCode} className="h-full w-full object-cover" />
+            <img src={row.agencyLogoUrl} alt={row.agencyCode} className="h-full w-full object-contain" />
           </div>
           <span>{row.update}</span>
         </span>
@@ -465,7 +465,7 @@ function ActivityItem({ title, desc, time, logoSrc }: { title: string; desc: str
   return (
     <div className="relative">
       <span className="absolute -left-[25px] top-0 h-4 w-4 overflow-hidden rounded-full border border-white bg-white shadow-sm">
-        <img src={logoSrc} alt="Activity source" className="h-full w-full object-cover" />
+        <img src={logoSrc} alt="Activity source" className="h-full w-full object-contain p-[1px]" />
       </span>
       <div className="space-y-0.5">
         <p className="text-xs font-bold text-slate-900 font-body">{title}</p>

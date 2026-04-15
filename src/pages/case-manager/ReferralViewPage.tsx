@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from '
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
-import { formatDisplayDateTime, getCaseManagerAgencies, getCaseManagerReferralById, type CaseManagerReferral } from '../../data/unifiedData'
+import { formatDisplayDateTime, getAgencyFocalByAgencyId, getCaseManagerAgencies, type CaseManagerReferral } from '../../data/unifiedData'
+import { getManagedReferralById, updateManagedReferral } from '../../data/caseLifecycleStore'
 
 type TimelineItem = {
   id: string
@@ -31,6 +32,9 @@ function withOffsetMinutes(iso: string, minutes: number): string {
 }
 
 function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
+  const agencyFocal = getAgencyFocalByAgencyId(referral.agencyId)
+  const agencyActor = `Agency Focal - ${agencyFocal.name}`
+
   const timeline: TimelineItem[] = [
     {
       id: `${referral.id}-created`,
@@ -52,7 +56,7 @@ function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
       title: 'Awaiting Agency Intake',
       description: 'Referral is pending agency intake acknowledgment.',
       timestamp: withOffsetMinutes(referral.createdAt, 20),
-      actor: `Agency Focal - ${referral.agencyName}`,
+      actor: agencyActor,
     })
   }
 
@@ -65,7 +69,7 @@ function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
       title: 'Referral Accepted',
       description: 'Agency accepted the referral and started processing.',
       timestamp: referral.updatedAt,
-      actor: `Agency Focal - ${referral.agencyName}`,
+      actor: agencyActor,
     })
   }
 
@@ -79,7 +83,7 @@ function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
         title: 'Referral Accepted',
         description: 'Agency accepted the referral and initiated service coordination.',
         timestamp: withOffsetMinutes(referral.updatedAt, -90),
-        actor: `Agency Focal - ${referral.agencyName}`,
+        actor: agencyActor,
       },
       {
         id: `${referral.id}-completed`,
@@ -89,7 +93,7 @@ function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
         title: 'Referral Completed',
         description: 'Service delivery was completed and verified by the agency.',
         timestamp: referral.updatedAt,
-        actor: `Agency Focal - ${referral.agencyName}`,
+        actor: agencyActor,
       },
     )
   }
@@ -103,7 +107,7 @@ function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
       title: 'Referral Rejected',
       description: 'Agency rejected the referral and returned it for follow-up.',
       timestamp: referral.updatedAt,
-      actor: `Agency Focal - ${referral.agencyName}`,
+      actor: agencyActor,
     })
   }
 
@@ -121,7 +125,7 @@ export default function ReferralViewPage() {
       return routeReferral
     }
 
-    return getCaseManagerReferralById(referralId)
+    return getManagedReferralById(referralId)
   }, [referralId, routeReferral])
 
   const [referral, setReferral] = useState<CaseManagerReferral | null>(resolvedReferral ?? null)
@@ -222,12 +226,16 @@ export default function ReferralViewPage() {
         return prev
       }
 
-      return {
+      const updatedReferral = {
         ...prev,
         notes: trimmedNotesDraft,
         documents: [...(prev.documents ?? []), ...uploadedDocs],
         updatedAt: nowIso,
       }
+
+      updateManagedReferral(prev.id, () => updatedReferral)
+
+      return updatedReferral
     })
     setTimeline(nextTimeline)
     setNewDocuments([])
@@ -351,7 +359,7 @@ export default function ReferralViewPage() {
                 {orderedTimeline.map((item) => (
                   <div key={item.id} className="relative flex items-start gap-3">
                     <div className="mt-0.5 -ml-[18px] h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm z-10">
-                      <img src={getTimelineLogoSrc(item.logoType, item.agencyId)} alt="Timeline source" className="h-full w-full object-cover" />
+                      <img src={getTimelineLogoSrc(item.logoType, item.agencyId)} alt="Timeline source" className="h-full w-full object-contain p-[1px]" />
                     </div>
                     <div>
                       <p className="text-[11px] leading-5 font-semibold text-slate-700">{item.title}</p>

@@ -1,5 +1,6 @@
-import heroImage from '../assets/hero.png'
 import { AppAnchorButton, AppButton } from './ui/AppButton'
+
+const heroImage = 'https://staging.pssc.org.ph/wp-content/uploads/2024/11/ofw-and-migration-pssc-policy-brief-1024x791.jpg'
 
 type HeroSectionProps = {
   title: string
@@ -12,7 +13,6 @@ export default function HeroSection({ title, description, onTrackAction }: HeroS
     <section className="relative overflow-hidden bg-surface px-8 pb-24 pt-16 md:pb-32 md:pt-24">
       <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 md:grid-cols-12">
         <div className="z-10 md:col-span-7">
-          <span className="editorial-label mb-4 block text-[10px] font-bold uppercase tracking-widest text-[#005288]">Region VII DMW Official Portal</span>
           <h1 className="mb-6 font-headline text-4xl font-extrabold leading-tight tracking-tight text-[#005288] md:text-6xl">
             {title}
           </h1>

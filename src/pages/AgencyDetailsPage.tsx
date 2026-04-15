@@ -48,8 +48,8 @@ export default function AgencyDetailsPage() {
             {/* Left Column: Details & Map */}
             <div className="lg:col-span-1 space-y-8">
               <div className="rounded-none bg-white p-6 border border-outline-variant/30 text-center shadow-sm">
-                <div className="mx-auto mb-6 flex h-32 w-32 items-center justify-center overflow-hidden rounded-none bg-surface-container-lowest shadow-sm border border-outline-variant/30">
-                  <img src={agency.logoUrl} alt={`${agency.short} Logo`} className="h-full w-full object-cover p-3" />
+                <div className="mx-auto mb-6 flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-surface-container-lowest shadow-sm border border-outline-variant/30">
+                  <img src={agency.logoUrl} alt={`${agency.short} Logo`} className="h-full w-full object-contain p-3" />
                 </div>
                 <h1 className="mb-4 text-2xl font-headline font-extrabold text-primary leading-tight">
                   {agency.name}

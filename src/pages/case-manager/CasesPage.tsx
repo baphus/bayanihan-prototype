@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
-import { CASE_MANAGER_CASES, toCaseHealthStatus, type CaseManagerCase } from '../../data/unifiedData'
+import { toCaseHealthStatus, type CaseManagerCase } from '../../data/unifiedData'
 import { getSpecialCategories } from '../../data/unifiedData'
+import { getManagedCases } from '../../data/caseLifecycleStore'
 
 type StatusFilter = 'ALL' | 'OPEN' | 'CLOSED'
 type ClientTypeFilter = 'ALL' | 'Overseas Filipino Worker' | 'Next of Kin'
@@ -53,11 +54,11 @@ export default function CasesPage() {
   })
 
   const rows = useMemo<CaseViewRow[]>(() => {
-    return CASE_MANAGER_CASES.map((item) => ({
+    return getManagedCases().map((item) => ({
       ...item,
       caseStatus: toCaseHealthStatus(item.status),
       specialCategory: (() => {
-        const categories = getSpecialCategories(item.caseNo)
+        const categories = item.ofwProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
         return categories.length > 0 ? categories.join(', ') : 'None'
       })(),
     }))

@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
-import { getTrackCasePageData, toCaseHealthStatus, type TrackingAgencyCardData } from '../data/unifiedData'
+import { toCaseHealthStatus, type TrackingAgencyCardData } from '../data/unifiedData'
+import { getManagedTrackCasePageData } from '../data/caseLifecycleStore'
 import TrackingNotFoundState from '../components/TrackingNotFoundState'
 
 type AgencyCardProps = TrackingAgencyCardData & {
@@ -115,7 +116,7 @@ import AiAssistant from '../components/AiAssistant'
 export default function TrackCasePage() {
   const { trackerNumber } = useParams()
   const cleanTrackerNumber = trackerNumber ? decodeURIComponent(trackerNumber).trim() : ''
-  const pageData = cleanTrackerNumber ? getTrackCasePageData(cleanTrackerNumber) : null
+  const pageData = cleanTrackerNumber ? getManagedTrackCasePageData(cleanTrackerNumber) : null
   const [timelineAgencyFilter, setTimelineAgencyFilter] = useState('ALL')
 
   if (!pageData) {
@@ -174,7 +175,9 @@ export default function TrackCasePage() {
                     Tracking ID: {trackingId}
                   </h1>
                   <p className="mt-[6px] text-[11px] font-[500] text-on-surface-variant">
-                    {involvedAgencyCount === 1
+                    {involvedAgencyCount === 0
+                      ? 'Your case has been created, but no agency referrals have been sent yet.'
+                      : involvedAgencyCount === 1
                       ? 'Your case is currently being handled by one agency.'
                       : `Your case is currently being handled by ${involvedAgencyCount} agencies.`}
                   </p>
@@ -249,17 +252,26 @@ export default function TrackCasePage() {
             <section className="space-y-4">
               <h2 className="px-1 text-[9px] font-[800] uppercase tracking-[0.15em] text-outline">Agency Breakdown</h2>
 
-              {pageData.trackingAgencies.map((agency) => (
-                <AgencyCard
-                  key={agency.name}
-                  {...agency}
-                  latestMilestoneHref={
-                    agency.latestMilestonePath
-                      ? `/track/${encodeURIComponent(trackingId)}${agency.latestMilestonePath}`
-                      : undefined
-                  }
-                />
-              ))}
+              {pageData.trackingAgencies.length > 0 ? (
+                pageData.trackingAgencies.map((agency) => (
+                  <AgencyCard
+                    key={agency.name}
+                    {...agency}
+                    latestMilestoneHref={
+                      agency.latestMilestonePath
+                        ? `/track/${encodeURIComponent(trackingId)}${agency.latestMilestonePath}`
+                        : undefined
+                    }
+                  />
+                ))
+              ) : (
+                <article className="border-l-[3px] border-[#d1d5db] bg-white px-[28px] py-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+                  <h3 className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">No referrals yet</h3>
+                  <p className="mt-3 text-[11px] leading-6 text-on-surface-variant">
+                    This case exists in the system, but it has not been referred to any agencies yet.
+                  </p>
+                </article>
+              )}
             </section>
           </section>
 
@@ -288,7 +300,7 @@ export default function TrackCasePage() {
                   {filteredTimeline.map((item, index) => (
                     <article key={`${item.date}-${index}`} className="relative pl-1">
                       <div className="absolute -left-[30px] top-[2px] h-[22px] w-[22px] overflow-hidden rounded-full border border-white bg-white shadow-sm">
-                        <img src={item.logoUrl} alt={`${item.agency} timeline source`} className="h-full w-full object-cover" />
+                        <img src={item.logoUrl} alt={`${item.agency} timeline source`} className="h-full w-full object-contain p-[1px]" />
                       </div>
                       <p className="text-[7.5px] font-extrabold uppercase tracking-[0.1em] text-primary mb-[2px]">{item.date}</p>
                       <h3 className="text-[10px] font-bold leading-[1.3] text-on-surface mb-[3px]">{item.title}</h3>

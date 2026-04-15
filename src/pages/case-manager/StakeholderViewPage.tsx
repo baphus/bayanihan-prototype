@@ -61,8 +61,8 @@ export default function StakeholderViewPage() {
         <main className="xl:col-span-7 space-y-4">
           <section className="rounded-[3px] border border-[#d8dee8] bg-white p-4 shadow-sm">
             <div className="flex items-start gap-3">
-              <div className="h-12 w-12 overflow-hidden rounded-[4px] border border-[#d8dee8] bg-white">
-                <img src={stakeholder.logoUrl} alt={`${stakeholder.short} logo`} className="h-full w-full object-cover" />
+              <div className="h-12 w-12 overflow-hidden rounded-full border border-[#d8dee8] bg-white">
+                <img src={stakeholder.logoUrl} alt={`${stakeholder.short} logo`} className="h-full w-full object-contain p-[2px]" />
               </div>
               <div>
                 <p className="text-[16px] font-bold text-slate-800">{stakeholder.name}</p>
