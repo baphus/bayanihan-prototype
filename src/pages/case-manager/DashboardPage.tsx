@@ -95,11 +95,12 @@ export default function DashboardPage() {
   const closureReadyCount = useMemo(() => referrals.filter((item) => item.status === 'COMPLETED').length, [referrals])
 
   const statusBreakdown = useMemo(() => getStatusBreakdown(CASE_MANAGER_CASES), [])
-  const openCount = statusBreakdown.PENDING + statusBreakdown.PROCESSING
-  const closedCount = statusBreakdown.COMPLETED + statusBreakdown.REJECTED
-  const totalCases = referrals.length
+  const totalCases = managedCases.length
+  const openCount = managedCases.filter((item) => item.status === 'PENDING' || item.status === 'PROCESSING').length
+  const closedCount = managedCases.filter((item) => item.status === 'COMPLETED' || item.status === 'REJECTED').length
+  const totalReferrals = referrals.length
   const completedReferralsCount = statusBreakdown.COMPLETED
-  const averageReferralCompletionRate = totalCases > 0 ? Math.round((completedReferralsCount / totalCases) * 100) : 0
+  const averageReferralCompletionRate = totalReferrals > 0 ? Math.round((completedReferralsCount / totalReferrals) * 100) : 0
   const averageCaseDaysToClose = useMemo(() => {
     const closedCases = managedCases.filter((item) => toCaseHealthStatus(item.status) === 'CLOSED')
     if (closedCases.length === 0) {
@@ -228,24 +229,38 @@ export default function DashboardPage() {
   )
 
   const casesOverTime = useMemo(() => {
-    const bucket = new Map<string, { key: string; label: string; count: number }>()
+    const sourceCases = managedCases.length > 0 ? managedCases : CASE_MANAGER_CASES
+    const buckets = new Map<string, { key: string; label: string; count: number }>()
+    const now = new Date()
+    const monthStarts: Date[] = []
 
-    managedCases.forEach((item) => {
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+      monthStarts.push(monthDate)
+      const key = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`
+      const label = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(monthDate)
+      buckets.set(key, { key, label, count: 0 })
+    }
+
+    const minMonthStart = monthStarts[0].getTime()
+
+    sourceCases.forEach((item) => {
       const date = new Date(item.createdAt)
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1).getTime()
+
+      if (monthStart < minMonthStart) {
+        return
+      }
+
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      const label = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
-      const existing = bucket.get(key)
+      const existing = buckets.get(key)
 
       if (existing) {
         existing.count += 1
-      } else {
-        bucket.set(key, { key, label, count: 1 })
       }
     })
 
-    return Array.from(bucket.values())
-      .sort((a, b) => a.key.localeCompare(b.key))
-      .slice(-6)
+    return Array.from(buckets.values())
   }, [managedCases])
 
   const casesOverTimeMax = casesOverTime.reduce((acc, item) => Math.max(acc, item.count), 1)
@@ -337,9 +352,9 @@ export default function DashboardPage() {
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
         <StatCard
           title="TOTAL CASES"
-          value={String(totalCases)}
-          trend={`${openCount} open referrals`}
-          desc="Active cases under your management"
+          value={String(openCount)}
+          trend="OPEN CASES"
+          desc={`Out of ${totalCases} total managed cases`}
           icon={<FolderCheck className="w-5 h-5 text-blue-800 opacity-50" />}
         />
         <StatCard
@@ -432,17 +447,19 @@ export default function DashboardPage() {
 
           <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
             <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-3">Cases Over Time</h3>
-            <div className="flex items-end gap-2 h-36">
-              {casesOverTime.map((item) => (
-                <div key={item.key} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1">
+            <div className="h-36">
+              <div className="flex h-full items-end gap-2">
+                {casesOverTime.map((item) => (
+                  <div key={item.key} className="flex-1 min-w-0 flex h-full flex-col items-center justify-end gap-1">
                   <div className="text-[10px] font-bold text-slate-500">{item.count}</div>
                   <div
                     className="w-full rounded-t-md bg-blue-800/80"
-                    style={{ height: `${Math.max(12, Math.round((item.count / casesOverTimeMax) * 100))}%` }}
+                    style={{ height: `${Math.max(10, Math.round((item.count / casesOverTimeMax) * 96))}px` }}
                   />
                   <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{item.label}</div>
-                </div>
-              ))}
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
 

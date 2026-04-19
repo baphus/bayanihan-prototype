@@ -7,6 +7,7 @@ import {
   formatAddressParts,
   formatDisplayDateTime,
   getCaseManagerAgencies,
+  getStakeholderServiceDetails,
   getStakeholderServices,
   resolveStakeholderService,
   toCaseHealthStatus,
@@ -279,8 +280,10 @@ export default function CaseViewPage(): JSX.Element {
       : caseRecord.ofwProfile?.fullName || persona.ofwName
   const caseStatus = toCaseHealthStatus(caseRecord.status)
   const fallbackSpecialCategories = getSpecialCategories(caseRecord.caseNo)
-  const ofwSpecialCategories = caseRecord.ofwProfile?.specialCategories || fallbackSpecialCategories
-  const nextOfKinSpecialCategories = caseRecord.nextOfKinProfile?.specialCategories || fallbackSpecialCategories
+  const ofwSpecialCategories =
+    caseRecord.ofwProfile?.specialCategories || (caseRecord.clientType === 'Overseas Filipino Worker' ? fallbackSpecialCategories : [])
+  const nextOfKinSpecialCategories =
+    caseRecord.nextOfKinProfile?.specialCategories || (caseRecord.clientType === 'Next of Kin' ? fallbackSpecialCategories : [])
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false)
   const [isReferAgencyOpen, setIsReferAgencyOpen] = useState(false)
   const [editableClientType, setEditableClientType] = useState(caseRecord.clientType)
@@ -295,6 +298,7 @@ export default function CaseViewPage(): JSX.Element {
   const [referServiceValue, setReferServiceValue] = useState('')
   const [referRemarks, setReferRemarks] = useState('')
   const [referNotes, setReferNotes] = useState('')
+  const [referUploadedDocuments, setReferUploadedDocuments] = useState<File[]>([])
 
   const allAgencies = getCaseManagerAgencies()
   const referralRows = useMemo(() => {
@@ -319,6 +323,16 @@ export default function CaseViewPage(): JSX.Element {
     [allAgencies, referredAgencyIds],
   )
   const availableReferServices = useMemo(() => getStakeholderServices(referAgencyId), [referAgencyId])
+  const selectedReferServiceDetail = useMemo(() => {
+    if (!referAgencyId || !referServiceValue.trim()) {
+      return undefined
+    }
+
+    return getStakeholderServiceDetails(referAgencyId).find((service) => service.title === referServiceValue)
+  }, [referAgencyId, referServiceValue])
+  const selectedReferServiceRequirements = useMemo(() => {
+    return selectedReferServiceDetail?.requiredDocuments ?? []
+  }, [selectedReferServiceDetail])
 
   useEffect(() => {
     if (!availableReferServices.length) {
@@ -339,6 +353,7 @@ export default function CaseViewPage(): JSX.Element {
     setReferServiceValue(resolveStakeholderService(defaultAgencyId, caseRecord.service))
     setReferRemarks('')
     setReferNotes('')
+    setReferUploadedDocuments([])
     setIsReferAgencyOpen(true)
   }
 
@@ -355,6 +370,19 @@ export default function CaseViewPage(): JSX.Element {
 
     const nowIso = new Date().toISOString()
     const referralId = `ref-${caseRecord.id}-${referAgencyId}-${Date.now()}`
+    const docs = referUploadedDocuments.map((file, index) => ({
+      id: `doc-${caseRecord.id}-${Date.now()}-${index}`,
+      name: file.name,
+      uploadedBy: 'Case Manager - Marychris M. Relon',
+      uploadedAt: nowIso,
+    }))
+
+    if (!docs.length) {
+      const proceedWithoutDocs = window.confirm('No referral documents were attached. Do you want to submit this referral anyway?')
+      if (!proceedWithoutDocs) {
+        return
+      }
+    }
 
     const referralPayload: CaseManagerReferral = {
       id: referralId,
@@ -369,12 +397,13 @@ export default function CaseViewPage(): JSX.Element {
       updatedAt: nowIso,
       remarks: referRemarks.trim() || 'Referral created from Case View page.',
       notes: referNotes.trim() || 'No additional notes provided.',
-      documents: [],
+      documents: docs,
     }
 
     createManagedReferral(referralPayload)
 
     setIsReferAgencyOpen(false)
+    setReferUploadedDocuments([])
     setRefreshKey((prev) => prev + 1)
   }
 
@@ -533,7 +562,7 @@ export default function CaseViewPage(): JSX.Element {
 
                 {ofwSpecialCategories.length > 0 ? (
                   <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3">
-                    <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Special Categories</p>
+                    <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Vulnerability</p>
                     <div className="mt-2 flex flex-wrap items-center gap-4">
                       {(['Senior Citizen', 'PWD', 'Solo Parent'] as SpecialCategory[]).map((category) => (
                         <label key={category} className="inline-flex items-center gap-2 text-[12px] text-slate-600">
@@ -563,7 +592,7 @@ export default function CaseViewPage(): JSX.Element {
                 </div>
                 {nextOfKinSpecialCategories.length > 0 ? (
                   <div className="mt-3 rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3">
-                    <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Special Categories</p>
+                    <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Vulnerability</p>
                     <div className="mt-2 flex flex-wrap items-center gap-4">
                       {(['Senior Citizen', 'PWD', 'Solo Parent'] as SpecialCategory[]).map((category) => (
                         <label key={category} className="inline-flex items-center gap-2 text-[12px] text-slate-600">
@@ -790,6 +819,42 @@ export default function CaseViewPage(): JSX.Element {
                   className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
                   placeholder="Optional internal notes"
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Service Requirements</label>
+                <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
+                  <p className="mb-2 text-[12px] font-semibold text-slate-700">
+                    Estimated Processing Time:{' '}
+                    <span className="text-[#0b5384]">{selectedReferServiceDetail?.processingDays ?? '-'} business days</span>
+                  </p>
+                  {selectedReferServiceRequirements.length ? (
+                    <ul className="space-y-1">
+                      {selectedReferServiceRequirements.map((requirement) => (
+                        <li key={requirement} className="text-[12px] text-slate-700">• {requirement}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[12px] text-slate-500">No listed requirements for this service.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Referral Documents</label>
+                <input
+                  type="file"
+                  multiple
+                  onChange={(event) => setReferUploadedDocuments(Array.from(event.target.files ?? []))}
+                  className="block w-full rounded-[3px] border border-[#cbd5e1] bg-white px-3 py-2 text-[12px] text-slate-700"
+                />
+                {referUploadedDocuments.length > 0 ? (
+                  <div className="mt-2 space-y-1 rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
+                    {referUploadedDocuments.map((file, index) => (
+                      <p key={`${file.name}-${index}`} className="text-[11px] text-slate-600">• {file.name}</p>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
 

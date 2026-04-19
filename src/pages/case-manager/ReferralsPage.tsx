@@ -7,6 +7,7 @@ import {
   formatDisplayDateTime,
   getCaseManagerAgencies,
   getCaseNarrativeBySeed,
+  getStakeholderServiceDetails,
   getStakeholderServices,
   resolveStakeholderService,
   toCaseHealthStatus,
@@ -41,6 +42,16 @@ export default function ReferralsPage() {
   const [uploadedDocuments, setUploadedDocuments] = useState<File[]>([])
 
   const availableServices = useMemo(() => getStakeholderServices(selectedAgencyId), [selectedAgencyId])
+  const selectedServiceDetail = useMemo(() => {
+    if (!selectedAgencyId || !serviceValue.trim()) {
+      return undefined
+    }
+
+    return getStakeholderServiceDetails(selectedAgencyId).find((service) => service.title === serviceValue)
+  }, [selectedAgencyId, serviceValue])
+  const selectedServiceRequirements = useMemo(() => {
+    return selectedServiceDetail?.requiredDocuments ?? []
+  }, [selectedServiceDetail])
 
   const filteredRows = useMemo(() => {
     const query = searchValue.trim().toLowerCase()
@@ -205,6 +216,13 @@ export default function ReferralsPage() {
       uploadedBy: 'Case Manager - Marychris M. Relon',
       uploadedAt: nowIso,
     }))
+
+    if (!docs.length) {
+      const proceedWithoutDocs = window.confirm('No referral documents were attached. Do you want to submit this referral anyway?')
+      if (!proceedWithoutDocs) {
+        return
+      }
+    }
 
     const newRow: CaseManagerReferral = {
       id: `ref-${selectedCase.id}-${Date.now()}`,
@@ -437,6 +455,24 @@ export default function ReferralsPage() {
                     </select>
                   </FieldLabel>
 
+                  <FieldLabel label="Service Requirements" full>
+                    <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
+                      <p className="mb-2 text-[12px] font-semibold text-slate-700">
+                        Estimated Processing Time:{' '}
+                        <span className="text-[#0b5384]">{selectedServiceDetail?.processingDays ?? '-'} business days</span>
+                      </p>
+                      {selectedServiceRequirements.length ? (
+                        <ul className="space-y-1">
+                          {selectedServiceRequirements.map((requirement) => (
+                            <li key={requirement} className="text-[12px] text-slate-700">• {requirement}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[12px] text-slate-500">No listed requirements for this service.</p>
+                      )}
+                    </div>
+                  </FieldLabel>
+
                   <FieldLabel label="Remarks" full>
                     <textarea
                       rows={4}
@@ -466,8 +502,8 @@ export default function ReferralsPage() {
                     />
                     {uploadedDocuments.length > 0 ? (
                       <div className="mt-2 space-y-1 rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
-                        {uploadedDocuments.map((file) => (
-                          <p key={file.name} className="text-[11px] text-slate-600">• {file.name}</p>
+                        {uploadedDocuments.map((file, index) => (
+                          <p key={`${file.name}-${index}`} className="text-[11px] text-slate-600">• {file.name}</p>
                         ))}
                       </div>
                     ) : null}

@@ -7,7 +7,7 @@ import { getManagedCases, getManagedReferralsByCaseId } from '../../data/caseLif
 
 type StatusFilter = 'ALL' | 'OPEN' | 'CLOSED'
 type ClientTypeFilter = 'ALL' | 'Overseas Filipino Worker' | 'Next of Kin'
-type SpecialCategoryFilter = 'ALL' | 'Senior Citizen' | 'PWD' | 'Solo Parent' | 'None'
+type VulnerabilityFilter = 'ALL' | 'Senior Citizen' | 'PWD' | 'Solo Parent' | 'None'
 
 type CaseViewRow = CaseManagerCase & {
   caseStatus: 'OPEN' | 'CLOSED'
@@ -52,7 +52,7 @@ export default function CasesPage() {
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [clientTypeFilter, setClientTypeFilter] = useState<ClientTypeFilter>('ALL')
-  const [specialCategoryFilter, setSpecialCategoryFilter] = useState<SpecialCategoryFilter>('ALL')
+  const [vulnerabilityFilter, setVulnerabilityFilter] = useState<VulnerabilityFilter>('ALL')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(10)
@@ -100,7 +100,10 @@ export default function CasesPage() {
         return agenciesById[firstAgencyId]?.logoUrl ?? '/logo.png'
       })(),
       specialCategory: (() => {
-        const categories = item.nextOfKinProfile?.specialCategories ?? item.ofwProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
+        const categories =
+          item.clientType === 'Next of Kin'
+            ? item.nextOfKinProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
+            : item.ofwProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
         return categories.length > 0 ? categories.join(', ') : 'None'
       })(),
     }))
@@ -119,15 +122,15 @@ export default function CasesPage() {
 
       const matchesStatus = statusFilter === 'ALL' || item.caseStatus === statusFilter
       const matchesClientType = clientTypeFilter === 'ALL' || item.clientType === clientTypeFilter
-      const matchesSpecialCategory =
-        specialCategoryFilter === 'ALL' ||
-        (specialCategoryFilter === 'None'
+      const matchesVulnerability =
+        vulnerabilityFilter === 'ALL' ||
+        (vulnerabilityFilter === 'None'
           ? item.specialCategory === 'None'
-          : item.specialCategory.includes(specialCategoryFilter))
+          : item.specialCategory.includes(vulnerabilityFilter))
 
-      return matchesSearch && matchesStatus && matchesClientType && matchesSpecialCategory
+      return matchesSearch && matchesStatus && matchesClientType && matchesVulnerability
     })
-  }, [rows, searchValue, statusFilter, clientTypeFilter, specialCategoryFilter])
+  }, [rows, searchValue, statusFilter, clientTypeFilter, vulnerabilityFilter])
 
   const totalRecords = filteredCases.length
   const totalPages = Math.max(1, Math.ceil(totalRecords / rowsPerPage))
@@ -167,17 +170,17 @@ export default function CasesPage() {
       filters.push({ key: 'clientType', label: 'Client Type', value: clientTypeFilter })
     }
 
-    if (specialCategoryFilter !== 'ALL') {
-      filters.push({ key: 'specialCategory', label: 'Special Category', value: specialCategoryFilter })
+    if (vulnerabilityFilter !== 'ALL') {
+      filters.push({ key: 'specialCategory', label: 'Vulnerability', value: vulnerabilityFilter })
     }
 
     return filters
-  }, [statusFilter, clientTypeFilter, specialCategoryFilter])
+  }, [statusFilter, clientTypeFilter, vulnerabilityFilter])
 
   const clearAllFilters = () => {
     setStatusFilter('ALL')
     setClientTypeFilter('ALL')
-    setSpecialCategoryFilter('ALL')
+    setVulnerabilityFilter('ALL')
     setCurrentPage(1)
   }
 
@@ -193,7 +196,7 @@ export default function CasesPage() {
     }
 
     if (filter.key === 'specialCategory') {
-      setSpecialCategoryFilter('ALL')
+      setVulnerabilityFilter('ALL')
     }
   }
 
@@ -216,7 +219,7 @@ export default function CasesPage() {
     },
     {
       key: 'specialCategory',
-      title: 'SPECIAL CATEGORY',
+      title: 'VULNERABILITY',
       render: (row) => <span className="text-[13px] text-slate-600 font-medium">{row.specialCategory}</span>,
     },
     {
@@ -369,11 +372,11 @@ export default function CasesPage() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[12px] font-bold uppercase tracking-wider text-[#64748b]">Special Category</label>
+              <label className="mb-1.5 block text-[12px] font-bold uppercase tracking-wider text-[#64748b]">Vulnerability</label>
               <select
-                value={specialCategoryFilter}
+                value={vulnerabilityFilter}
                 onChange={(event) => {
-                  setSpecialCategoryFilter(event.target.value as SpecialCategoryFilter)
+                  setVulnerabilityFilter(event.target.value as VulnerabilityFilter)
                   setCurrentPage(1)
                 }}
                 className="w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] font-bold text-slate-700 outline-none"

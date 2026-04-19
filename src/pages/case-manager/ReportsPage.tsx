@@ -3,9 +3,10 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
-import { getClientPersona } from '../../data/unifiedData'
+import { getClientPersona, getSpecialCategories } from '../../data/unifiedData'
 import { getManagedCases, getManagedLatestUpdate, getManagedReferrals } from '../../data/caseLifecycleStore'
 import { getExistingClientProfile } from '../../data/unifiedData'
+import { exportToCsv, type ExportColumn } from '../../utils/export/exportCsv'
 
 type ReportCase = {
   id: string
@@ -24,6 +25,9 @@ type ReportManagedCase = {
   caseNo: string
   clientName: string
   clientType: 'Overseas Filipino Worker' | 'Next of Kin'
+  gender: string
+  birthDate: string
+  specialCategories: string[]
   agencyName: string
   milestone: string
   lastJob?: string
@@ -46,8 +50,15 @@ type ReportManagedClient = {
   latestActivity: string
 }
 
+type ReportExportRow = {
+  section: string
+  metric: string
+  value: string | number
+}
+
 type TrendGranularity = 'day' | 'week' | 'month' | 'year'
 type QuickRangeOption = '7_DAYS' | '14_DAYS' | '30_DAYS' | '6_MONTHS' | '1_YEAR' | 'CUSTOM'
+type CasesChartView = 'line' | 'bar'
 
 const DAY_MS = 1000 * 60 * 60 * 24
 
@@ -238,6 +249,44 @@ function formatDisplayDate(isoDate?: string): string {
   })
 }
 
+function getAgeFromBirthDate(birthDateLabel: string, referenceDate: Date): number | null {
+  const match = birthDateLabel.match(/(\d{4})$/)
+  if (!match) {
+    return null
+  }
+
+  const birthYear = Number(match[1])
+  if (Number.isNaN(birthYear)) {
+    return null
+  }
+
+  return Math.max(0, referenceDate.getFullYear() - birthYear)
+}
+
+function toAgeGroup(age: number | null): string {
+  if (age === null) {
+    return 'Unknown'
+  }
+
+  if (age < 25) {
+    return '18-24'
+  }
+
+  if (age < 35) {
+    return '25-34'
+  }
+
+  if (age < 45) {
+    return '35-44'
+  }
+
+  if (age < 60) {
+    return '45-59'
+  }
+
+  return '60+'
+}
+
 function buildLinePath(series: number[], width: number, height: number, inset = 20) {
   if (series.length === 0) {
     return ''
@@ -302,6 +351,7 @@ export default function ReportsPage() {
   const [searchValue, setSearchValue] = useState('')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'>('ALL')
+  const [reportAgencyScope, setReportAgencyScope] = useState('ALL')
   const [agencyFilter, setAgencyFilter] = useState('ALL')
   const [casesCurrentPage, setCasesCurrentPage] = useState(1)
   const [casesRowsPerPage, setCasesRowsPerPage] = useState(10)
@@ -309,6 +359,8 @@ export default function ReportsPage() {
   const [clientsRowsPerPage, setClientsRowsPerPage] = useState(10)
   const [referralsCurrentPage, setReferralsCurrentPage] = useState(1)
   const [referralsRowsPerPage, setReferralsRowsPerPage] = useState(10)
+  const [casesChartView, setCasesChartView] = useState<CasesChartView>('line')
+  const [casesHoveredIndex, setCasesHoveredIndex] = useState<number | null>(null)
 
   const reportCases: ReportCase[] = getManagedReferrals().map((item) => ({
     id: item.id,
@@ -350,28 +402,60 @@ export default function ReportsPage() {
     () =>
       searchedCases.filter((row) => {
         const statusMatch = statusFilter === 'ALL' ? true : row.status === statusFilter
+        const agencyScopeMatch = reportAgencyScope === 'ALL' ? true : row.agencyName === reportAgencyScope
         const agencyMatch = agencyFilter === 'ALL' ? true : row.agencyName === agencyFilter
-        return statusMatch && agencyMatch
+        return statusMatch && agencyScopeMatch && agencyMatch
       }),
-    [searchedCases, statusFilter, agencyFilter],
+    [searchedCases, statusFilter, reportAgencyScope, agencyFilter],
   )
 
   const reportManagedCases = useMemo<ReportManagedCase[]>(() => {
-    return getManagedCases().map((item) => ({
-      id: item.id,
-      caseNo: item.caseNo,
-      clientName: item.clientName,
-      clientType: item.clientType,
-      agencyName: item.agencyName,
-      milestone: item.milestone,
-      lastJob: item.workHistory?.lastJob,
-      lastCountry: item.workHistory?.lastCountry,
-      provinceName: item.ofwProfile?.address?.provinceName || getExistingClientProfile(item.clientName).address.provinceName || 'Unknown',
-      status: item.status,
-      createdOn: item.createdAt.slice(0, 10),
-      updatedOn: item.updatedAt.slice(0, 10),
-    }))
+    return getManagedCases().map((item) => {
+      const existingProfile = getExistingClientProfile(item.clientName)
+
+      return {
+        id: item.id,
+        caseNo: item.caseNo,
+        clientName: item.clientName,
+        clientType: item.clientType,
+        gender: item.ofwProfile?.gender || existingProfile.gender,
+        birthDate: item.ofwProfile?.birthDate || existingProfile.birthDate,
+        specialCategories: item.ofwProfile?.specialCategories || getSpecialCategories(item.caseNo),
+        agencyName: item.agencyName,
+        milestone: item.milestone,
+        lastJob: item.workHistory?.lastJob,
+        lastCountry: item.workHistory?.lastCountry,
+        provinceName: item.ofwProfile?.address?.provinceName || existingProfile.address.provinceName || 'Unknown',
+        status: item.status,
+        createdOn: item.createdAt.slice(0, 10),
+        updatedOn: item.updatedAt.slice(0, 10),
+      }
+    })
   }, [])
+
+  const scopedDateRangeCases = useMemo(() => {
+    if (reportAgencyScope === 'ALL') {
+      return dateRangeCases
+    }
+
+    return dateRangeCases.filter((row) => row.agencyName === reportAgencyScope)
+  }, [dateRangeCases, reportAgencyScope])
+
+  const scopedManagedCasesInRange = useMemo(() => {
+    return reportManagedCases.filter((row) => {
+      const created = toCalendarDate(row.createdOn)
+      const inDateRange = created >= activeFromDate && created <= activeToDate
+      if (!inDateRange) {
+        return false
+      }
+
+      if (reportAgencyScope === 'ALL') {
+        return true
+      }
+
+      return row.agencyName === reportAgencyScope
+    })
+  }, [reportManagedCases, activeFromDate, activeToDate, reportAgencyScope])
 
   const filteredManagedCases = useMemo(() => {
     return reportManagedCases.filter((row) => {
@@ -385,11 +469,12 @@ export default function ReportsPage() {
         query.length === 0 ||
         [row.caseNo, row.clientName, row.clientType, row.agencyName, row.milestone].join(' ').toLowerCase().includes(query)
       const matchesStatus = statusFilter === 'ALL' ? true : row.status === statusFilter
+      const matchesScope = reportAgencyScope === 'ALL' ? true : row.agencyName === reportAgencyScope
       const matchesAgency = agencyFilter === 'ALL' ? true : row.agencyName === agencyFilter
 
-      return matchesSearch && matchesStatus && matchesAgency
+      return matchesSearch && matchesStatus && matchesScope && matchesAgency
     })
-  }, [reportManagedCases, activeFromDate, activeToDate, searchValue, statusFilter, agencyFilter])
+  }, [reportManagedCases, activeFromDate, activeToDate, searchValue, statusFilter, reportAgencyScope, agencyFilter])
 
   const referralsTotalRecords = filteredCases.length
   const referralsTotalPages = Math.max(1, Math.ceil(referralsTotalRecords / referralsRowsPerPage))
@@ -460,12 +545,18 @@ export default function ReportsPage() {
   }, [managedClients, safeClientsPage, clientsRowsPerPage])
 
   const kpiData = useMemo(() => {
-    const total = dateRangeCases.length
-    const completed = dateRangeCases.filter((row) => row.status === 'COMPLETED').length
-    const pending = dateRangeCases.filter((row) => row.status === 'PENDING').length
-    const averageReferralCompletionRate = total > 0 ? (completed / total) * 100 : 0
+    const totalReferrals = scopedDateRangeCases.length
+    const totalCases = scopedManagedCasesInRange.length
+    const openCases = scopedManagedCasesInRange.filter((row) => row.status === 'PENDING' || row.status === 'PROCESSING').length
+    const closedCasesCount = scopedManagedCasesInRange.filter((row) => row.status === 'COMPLETED' || row.status === 'REJECTED').length
+    const completedReferrals = scopedDateRangeCases.filter((row) => row.status === 'COMPLETED').length
+    const averageReferralCompletionRate = totalReferrals > 0 ? (completedReferrals / totalReferrals) * 100 : 0
 
     const closedCases = getManagedCases().filter((item) => {
+      if (reportAgencyScope !== 'ALL' && item.agencyName !== reportAgencyScope) {
+        return false
+      }
+
       const isClosed = item.status === 'COMPLETED' || item.status === 'REJECTED'
       if (!isClosed) {
         return false
@@ -484,7 +575,7 @@ export default function ReportsPage() {
           }, 0) / closedCases.length
         : 0
 
-    const completedDurations = dateRangeCases
+    const completedDurations = scopedDateRangeCases
       .filter((row) => row.status === 'COMPLETED' && row.completedOn)
       .map((row) => {
         const start = toCalendarDate(row.createdOn).getTime()
@@ -498,21 +589,22 @@ export default function ReportsPage() {
         : 0
 
     return {
-      total,
-      completed,
-      pending,
+      totalCases,
+      totalReferrals,
+      openCases,
+      closedCases: closedCasesCount,
       averageDays: averageCaseClosureDays,
       averageReferralCompletionRate,
       averageReferralCompletionDays,
     }
-  }, [dateRangeCases, activeFromDate, activeToDate])
+  }, [scopedDateRangeCases, scopedManagedCasesInRange, activeFromDate, activeToDate, reportAgencyScope])
 
   const statusBreakdown = useMemo(() => {
-    const total = dateRangeCases.length || 1
-    const completed = dateRangeCases.filter((row) => row.status === 'COMPLETED').length
-    const processing = dateRangeCases.filter((row) => row.status === 'PROCESSING').length
-    const pending = dateRangeCases.filter((row) => row.status === 'PENDING').length
-    const rejected = dateRangeCases.filter((row) => row.status === 'REJECTED').length
+    const total = scopedDateRangeCases.length || 1
+    const completed = scopedDateRangeCases.filter((row) => row.status === 'COMPLETED').length
+    const processing = scopedDateRangeCases.filter((row) => row.status === 'PROCESSING').length
+    const pending = scopedDateRangeCases.filter((row) => row.status === 'PENDING').length
+    const rejected = scopedDateRangeCases.filter((row) => row.status === 'REJECTED').length
 
     return [
       { label: 'Completed', count: completed, hex: '#10b981', color: 'bg-emerald-500' },
@@ -520,10 +612,10 @@ export default function ReportsPage() {
       { label: 'Pending', count: pending, hex: '#f59e0b', color: 'bg-amber-500' },
       { label: 'Rejected', count: rejected, hex: '#f43f5e', color: 'bg-rose-500' },
     ].filter(item => item.count > 0).map(s => ({ ...s, percent: Math.round((s.count / total) * 100) }))
-  }, [dateRangeCases])
+  }, [scopedDateRangeCases])
 
   const casesStatusStats = useMemo(() => {
-    const cases = getManagedReferrals()
+    const cases = scopedManagedCasesInRange
     const total = cases.length || 1
     const open = cases.filter(row => row.status === 'PENDING' || row.status === 'PROCESSING').length
     const closed = cases.filter(row => row.status === 'COMPLETED' || row.status === 'REJECTED').length
@@ -532,13 +624,10 @@ export default function ReportsPage() {
       { label: 'Open', count: open, hex: '#1e3a8a', color: 'bg-blue-900' },
       { label: 'Closed', count: closed, hex: '#cbd5e1', color: 'bg-slate-300' },
     ].filter(item => item.count > 0).map(s => ({ ...s, percent: Math.round((s.count / total) * 100) }))
-  }, [])
+  }, [scopedManagedCasesInRange])
 
   const casesByProvinceStats = useMemo(() => {
-    const casesInRange = reportManagedCases.filter((item) => {
-      const created = toCalendarDate(item.createdOn)
-      return created >= activeFromDate && created <= activeToDate
-    })
+    const casesInRange = scopedManagedCasesInRange
 
     const provinceCounts: Record<string, number> = {};
     const total = casesInRange.length || 1;
@@ -563,13 +652,10 @@ export default function ReportsPage() {
         };
       })
       .sort((a, b) => b.count - a.count);
-  }, [reportManagedCases, activeFromDate, activeToDate])
+  }, [scopedManagedCasesInRange])
 
   const clientInsights = useMemo(() => {
-    const casesInRange = reportManagedCases.filter((item) => {
-      const created = toCalendarDate(item.createdOn)
-      return created >= activeFromDate && created <= activeToDate
-    })
+    const casesInRange = scopedManagedCasesInRange
 
     const occupationBuckets = new Map<string, number>()
     const countryBuckets = new Map<string, number>()
@@ -623,17 +709,76 @@ export default function ReportsPage() {
       occupationStats: toPieStats(occupationBuckets, occupationPalette),
       countryStats: toPieStats(countryBuckets, countryPalette),
     }
-  }, [reportManagedCases, activeFromDate, activeToDate])
+  }, [scopedManagedCasesInRange])
+
+  const demographicStats = useMemo(() => {
+    const genderBuckets = new Map<string, number>()
+    const clientTypeBuckets = new Map<string, number>()
+    const ageGroupBuckets = new Map<string, number>()
+    const specialCategoryBuckets = new Map<string, number>()
+
+    scopedManagedCasesInRange.forEach((item) => {
+      genderBuckets.set(item.gender, (genderBuckets.get(item.gender) ?? 0) + 1)
+      clientTypeBuckets.set(item.clientType, (clientTypeBuckets.get(item.clientType) ?? 0) + 1)
+
+      const age = getAgeFromBirthDate(item.birthDate, activeToDate)
+      const ageGroup = toAgeGroup(age)
+      ageGroupBuckets.set(ageGroup, (ageGroupBuckets.get(ageGroup) ?? 0) + 1)
+
+      item.specialCategories.forEach((category) => {
+        specialCategoryBuckets.set(category, (specialCategoryBuckets.get(category) ?? 0) + 1)
+      })
+    })
+
+    const toPieStats = (buckets: Map<string, number>, palette: { hex: string; color: string }[]) => {
+      const entries = Array.from(buckets.entries()).sort((a, b) => b[1] - a[1])
+      const total = entries.reduce((sum, [, count]) => sum + count, 0) || 1
+
+      return entries.map(([label, count], index) => ({
+        label,
+        count,
+        hex: palette[index % palette.length].hex,
+        color: palette[index % palette.length].color,
+        percent: Math.round((count / total) * 100),
+      }))
+    }
+
+    const genderPalette = [
+      { hex: '#0b5a8c', color: 'bg-sky-700' },
+      { hex: '#0b7a75', color: 'bg-teal-700' },
+      { hex: '#475569', color: 'bg-slate-600' },
+    ]
+    const clientTypePalette = [
+      { hex: '#1e3a8a', color: 'bg-blue-900' },
+      { hex: '#9a3412', color: 'bg-orange-800' },
+    ]
+    const agePalette = [
+      { hex: '#7c3aed', color: 'bg-violet-600' },
+      { hex: '#0369a1', color: 'bg-sky-700' },
+      { hex: '#0f766e', color: 'bg-teal-700' },
+      { hex: '#b45309', color: 'bg-amber-700' },
+      { hex: '#334155', color: 'bg-slate-700' },
+    ]
+
+    return {
+      gender: toPieStats(genderBuckets, genderPalette),
+      clientType: toPieStats(clientTypeBuckets, clientTypePalette),
+      ageGroup: toPieStats(ageGroupBuckets, agePalette),
+      specialCategories: Array.from(specialCategoryBuckets.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([label, count]) => ({ label, count })),
+    }
+  }, [scopedManagedCasesInRange, activeToDate])
 
   const agencyStats = useMemo(() => {
-    if (dateRangeCases.length === 0) return [];
-    const buckets = dateRangeCases.reduce<Record<string, number>>((acc, row) => {
+    if (scopedDateRangeCases.length === 0) return [];
+    const buckets = scopedDateRangeCases.reduce<Record<string, number>>((acc, row) => {
       acc[row.agencyName] = (acc[row.agencyName] ?? 0) + 1
       return acc
     }, {})
 
     const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1])
-    const total = dateRangeCases.length || 1;
+    const total = scopedDateRangeCases.length || 1;
     const colors = ['#1e3a8a', '#0f766e', '#ea580c', '#6d28d9', '#be123c', '#4338ca'];
     const bgColors = ['bg-blue-900', 'bg-teal-700', 'bg-orange-600', 'bg-violet-700', 'bg-rose-700', 'bg-indigo-700'];
     
@@ -647,21 +792,21 @@ export default function ReportsPage() {
         percent: Math.round((item[1] / total) * 100)
       };
     });
-  }, [dateRangeCases]);
+  }, [scopedDateRangeCases]);
 
   const serviceStats = useMemo(() => {
-    if (dateRangeCases.length === 0) {
+    if (scopedDateRangeCases.length === 0) {
       return []
     }
 
-    const buckets = dateRangeCases.reduce<Record<string, number>>((acc, row) => {
+    const buckets = scopedDateRangeCases.reduce<Record<string, number>>((acc, row) => {
       const label = `${row.service} (${row.agencyName})`
       acc[label] = (acc[label] ?? 0) + 1
       return acc
     }, {})
 
     const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1])
-    const total = dateRangeCases.length || 1
+    const total = scopedDateRangeCases.length || 1
     const colors = ['#0369a1', '#0f766e', '#ea580c', '#7c3aed', '#be123c', '#4338ca']
     const bgColors = ['bg-sky-700', 'bg-teal-700', 'bg-orange-600', 'bg-violet-700', 'bg-rose-700', 'bg-indigo-700']
 
@@ -675,7 +820,7 @@ export default function ReportsPage() {
         percent: Math.round((item[1] / total) * 100),
       }
     })
-  }, [dateRangeCases])
+  }, [scopedDateRangeCases])
 
   const mostRequestedService = useMemo(() => {
     if (serviceStats.length === 0) {
@@ -686,12 +831,9 @@ export default function ReportsPage() {
     return {
       label: top.label,
       count: top.count,
-      share: Math.round((top.count / (dateRangeCases.length || 1)) * 100),
+      share: Math.round((top.count / (scopedDateRangeCases.length || 1)) * 100),
     }
-  }, [serviceStats, dateRangeCases.length])
-
-  const trendData = useMemo(() => buildTrendData(activeFromDate, activeToDate, dateRangeCases), [activeFromDate, activeToDate, dateRangeCases])
-  const linePath = useMemo(() => buildLinePath(trendData.series, 530, 220), [trendData.series])
+  }, [serviceStats, scopedDateRangeCases.length])
 
   const caseTrendRows = useMemo<ReportCase[]>(() => {
     return getManagedCases().map((item) => ({
@@ -707,19 +849,58 @@ export default function ReportsPage() {
     }))
   }, [])
 
-  const casesTrendData = useMemo(
-    () => buildTrendData(activeFromDate, activeToDate, caseTrendRows),
-    [activeFromDate, activeToDate, caseTrendRows],
-  )
-  const casesLinePath = useMemo(() => buildLinePath(casesTrendData.series, 530, 220), [casesTrendData.series])
-
-  const trendLabelStep = useMemo(() => {
-    if (trendData.labels.length <= 8) {
-      return 1
+  const scopedCaseTrendRows = useMemo(() => {
+    if (reportAgencyScope === 'ALL') {
+      return caseTrendRows
     }
 
-    return Math.ceil(trendData.labels.length / 6)
-  }, [trendData.labels.length])
+    return caseTrendRows.filter((row) => row.agencyName === reportAgencyScope)
+  }, [caseTrendRows, reportAgencyScope])
+
+  const casesTrendData = useMemo(
+    () => buildTrendData(activeFromDate, activeToDate, scopedCaseTrendRows),
+    [activeFromDate, activeToDate, scopedCaseTrendRows],
+  )
+  const casesLinePath = useMemo(() => buildLinePath(casesTrendData.series, 530, 220), [casesTrendData.series])
+  const casesChartGeometry = useMemo(() => {
+    const minValue = Math.min(...casesTrendData.series, 0)
+    const maxValue = Math.max(...casesTrendData.series, 1)
+    const range = Math.max(1, maxValue - minValue)
+
+    const points = casesTrendData.series.map((value, idx) => {
+      const x = getLinePointX(idx, casesTrendData.series.length)
+      const y = 20 + (1 - (value - minValue) / range) * (220 - 40)
+      return {
+        x,
+        y,
+        value,
+        label: casesTrendData.labels[idx],
+      }
+    })
+
+    const slotWidth = points.length > 1 ? points[1].x - points[0].x : 44
+    const barWidth = Math.max(4, Math.min(22, slotWidth - 2, slotWidth * 0.72))
+    const baselineY = 20 + (1 - (minValue - minValue) / range) * (220 - 40)
+
+    return {
+      points,
+      minValue,
+      maxValue,
+      range,
+      slotWidth,
+      barWidth,
+      baselineY,
+    }
+  }, [casesTrendData])
+  const casesAreaPath = useMemo(() => {
+    if (casesChartGeometry.points.length === 0 || !casesLinePath) {
+      return ''
+    }
+
+    const first = casesChartGeometry.points[0]
+    const last = casesChartGeometry.points[casesChartGeometry.points.length - 1]
+    return `${casesLinePath} L ${last.x.toFixed(1)} ${casesChartGeometry.baselineY.toFixed(1)} L ${first.x.toFixed(1)} ${casesChartGeometry.baselineY.toFixed(1)} Z`
+  }, [casesChartGeometry, casesLinePath])
 
   const casesTrendLabelStep = useMemo(() => {
     if (casesTrendData.labels.length <= 8) {
@@ -728,15 +909,6 @@ export default function ReportsPage() {
 
     return Math.ceil(casesTrendData.labels.length / 6)
   }, [casesTrendData.labels.length])
-
-  const trendTitle =
-    trendData.granularity === 'day'
-      ? 'Daily Trend'
-      : trendData.granularity === 'week'
-        ? 'Weekly Trend'
-        : trendData.granularity === 'month'
-          ? 'Monthly Trend'
-          : 'Yearly Trend'
 
   const casesTrendTitle =
     casesTrendData.granularity === 'day'
@@ -748,21 +920,21 @@ export default function ReportsPage() {
           : 'Yearly Trend'
 
   const mostActiveAgency = useMemo(() => {
-    if (dateRangeCases.length === 0) {
+    if (scopedDateRangeCases.length === 0) {
       return { name: 'No data in range', count: 0, share: 0 }
     }
 
-    const buckets = dateRangeCases.reduce<Record<string, number>>((acc, row) => {
+    const buckets = scopedDateRangeCases.reduce<Record<string, number>>((acc, row) => {
       acc[row.agencyName] = (acc[row.agencyName] ?? 0) + 1
       return acc
     }, {})
 
     const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1])
     const [name, count] = sorted[0]
-    const share = Math.round((count / dateRangeCases.length) * 100)
+    const share = Math.round((count / scopedDateRangeCases.length) * 100)
 
     return { name, count, share }
-  }, [dateRangeCases])
+  }, [scopedDateRangeCases])
 
   const agencies = useMemo(() => {
     return Array.from(new Set(reportCases.map((row) => row.agencyName))).sort((a, b) => a.localeCompare(b))
@@ -781,6 +953,86 @@ export default function ReportsPage() {
 
     return filters
   }, [statusFilter, agencyFilter])
+
+  const reportExportRows = useMemo<ReportExportRow[]>(() => {
+    const reportScopeLabel = reportAgencyScope === 'ALL' ? 'All Agencies' : reportAgencyScope
+    const periodLabel = `${formatDisplayDate(fromDateISO)} - ${formatDisplayDate(toDateISO)}`
+
+    const rows: ReportExportRow[] = [
+      { section: 'Report Metadata', metric: 'Report Scope Agency', value: reportScopeLabel },
+      { section: 'Report Metadata', metric: 'Date Range', value: periodLabel },
+      { section: 'Report Metadata', metric: 'Status Filter', value: statusFilter },
+      { section: 'Report Metadata', metric: 'Agency Filter', value: agencyFilter },
+      { section: 'Report Metadata', metric: 'Search Query', value: searchValue.trim() || 'None' },
+      { section: 'KPI', metric: 'Total Cases', value: kpiData.totalCases },
+      { section: 'KPI', metric: 'Total Referrals', value: kpiData.totalReferrals },
+      { section: 'KPI', metric: 'Open Cases', value: kpiData.openCases },
+      { section: 'KPI', metric: 'Closed Cases', value: kpiData.closedCases },
+      { section: 'KPI', metric: 'Avg Days to Case Closure', value: kpiData.averageDays.toFixed(1) },
+      {
+        section: 'KPI',
+        metric: 'Avg Referral Completion Days',
+        value: kpiData.averageReferralCompletionDays.toFixed(1),
+      },
+    ]
+
+    statusBreakdown.forEach((item) => {
+      rows.push({ section: 'Referrals by Status', metric: item.label, value: `${item.count} (${item.percent}%)` })
+    })
+
+    agencyStats.forEach((item) => {
+      rows.push({ section: 'Referrals by Agency', metric: item.label, value: `${item.count} (${item.percent}%)` })
+    })
+
+    serviceStats.forEach((item) => {
+      rows.push({ section: 'Referrals by Service', metric: item.label, value: `${item.count} (${item.percent}%)` })
+    })
+
+    demographicStats.gender.forEach((item) => {
+      rows.push({ section: 'Demographics - Gender', metric: item.label, value: `${item.count} (${item.percent}%)` })
+    })
+
+    demographicStats.clientType.forEach((item) => {
+      rows.push({ section: 'Demographics - Client Type', metric: item.label, value: `${item.count} (${item.percent}%)` })
+    })
+
+    demographicStats.ageGroup.forEach((item) => {
+      rows.push({ section: 'Demographics - Age Group', metric: item.label, value: `${item.count} (${item.percent}%)` })
+    })
+
+    demographicStats.specialCategories.forEach((item) => {
+      rows.push({ section: 'Demographics - Vulnerability', metric: item.label, value: item.count })
+    })
+
+    return rows
+  }, [
+    reportAgencyScope,
+    fromDateISO,
+    toDateISO,
+    statusFilter,
+    agencyFilter,
+    searchValue,
+    kpiData,
+    statusBreakdown,
+    agencyStats,
+    serviceStats,
+    demographicStats,
+  ])
+
+  const reportExportColumns: ExportColumn<ReportExportRow>[] = [
+    { header: 'Section', accessor: (row) => row.section },
+    { header: 'Metric', accessor: (row) => row.metric },
+    { header: 'Value', accessor: (row) => row.value },
+  ]
+
+  const handleExportReportSummary = () => {
+    const scopeSlug = (reportAgencyScope === 'ALL' ? 'all-agencies' : reportAgencyScope)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+
+    exportToCsv(reportExportRows, reportExportColumns, `case-manager-report-${scopeSlug}.csv`)
+  }
 
   const resetDateRange = () => {
     setFromDateISO(defaultFromISO)
@@ -937,13 +1189,13 @@ export default function ReportsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-4">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <header className="flex flex-col gap-4">
         <div>
           <h1 className={pageHeadingStyles.pageTitle}>Reports</h1>
           <p className={pageHeadingStyles.pageSubtitle}>Case manager oversight of referral outcomes and agency workload.</p>
         </div>
 
-        <div className="flex w-full max-w-[620px] flex-wrap items-center gap-2 rounded-[2px] border border-[#cfd6de] bg-[#f7f9fc] p-2.5">
+        <div className="flex flex-wrap items-center gap-2 rounded-[2px] border border-[#cfd6de] bg-[#f7f9fc] p-2.5">
           <div className="inline-flex h-9 items-center gap-2 border border-[#cbd5e1] bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">
             <CalendarRange className="h-4 w-4" />
             Date Range
@@ -1014,33 +1266,56 @@ export default function ReportsPage() {
           >
             Reset
           </button>
-          <button className="ml-auto inline-flex h-9 items-center gap-2 border border-[#cbd5e1] bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-[#0b5a8c]">
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-[2px] border border-[#cfd6de] bg-[#f7f9fc] p-2.5 lg:flex-row lg:items-center">
+          <div className="flex items-center gap-2 rounded-[2px] border border-[#cbd5e1] bg-white px-2 py-1.5">
+            <label htmlFor="report-scope" className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-600">
+              Report Scope
+            </label>
+            <select
+              id="report-scope"
+              value={reportAgencyScope}
+              onChange={(event) => setReportAgencyScope(event.target.value)}
+              className="h-8 min-w-[220px] border border-[#cbd5e1] bg-white px-2 text-[11px] font-bold text-slate-700 outline-none"
+            >
+              <option value="ALL">All agencies</option>
+              {agencies.map((agency) => (
+                <option key={agency} value={agency}>
+                  {agency}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={handleExportReportSummary}
+            className="inline-flex h-9 items-center gap-2 border border-[#cbd5e1] bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-[#0b5a8c] lg:ml-auto"
+          >
             <Download className="h-3.5 w-3.5" />
             Export
           </button>
         </div>
       </header>
 
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Total Referrals" value={`${kpiData.total}`} accent="border-l-[#0b5a8c]" />
-        <MetricCard label="Completed" value={`${kpiData.completed}`} accent="border-l-[#0b7a75]" />
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Total Cases" value={`${kpiData.totalCases}`} accent="border-l-[#1e3a8a]" />
         <MetricCard
-          label="Pending"
-          value={`${kpiData.pending}`}
+          label="Open Cases"
+          value={`${kpiData.openCases}`}
           accent="border-l-[#9a5b1a]"
           valueTone="text-[#9a5b1a]"
+        />
+        <MetricCard
+          label="Closed Cases"
+          value={`${kpiData.closedCases}`}
+          accent="border-l-[#0b7a75]"
         />
         <MetricCard
           label="Avg Days to Case Closure"
           value={kpiData.averageDays.toFixed(1)}
           accent="border-l-[#0b5a8c]"
           description="Average days from case creation to case closure"
-        />
-        <MetricCard
-          label="Avg Referral Completion Days"
-          value={`${kpiData.averageReferralCompletionDays.toFixed(1)} Days`}
-          accent="border-l-[#0b7a75]"
-          trailing={<div className="h-[4px] w-8 rounded-full bg-[#0b7a75]" />}
         />
       </section>
 
@@ -1083,49 +1358,243 @@ export default function ReportsPage() {
         </article>
       </section>
 
+      <h2 className={`mb-3 mt-8 ${pageHeadingStyles.sectionTitle}`}>Demographic Data</h2>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
+        <article className="border border-[#cbd5e1] bg-white p-4">
+          <h3 className="mb-4 text-[14px] font-bold text-blue-900">Gender Distribution</h3>
+          <div className="flex items-center justify-center">
+            <PieChart data={demographicStats.gender} className="w-32 h-32" />
+          </div>
+          <div className="mt-4 space-y-2">
+            {demographicStats.gender.map((item) => (
+              <div key={item.label} className="flex items-center justify-between text-[12px]">
+                <span className="inline-flex items-center gap-2 text-slate-600">
+                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.color}`} />
+                  {item.label}
+                </span>
+                <span className="font-bold text-slate-700">{item.percent}%</span>
+              </div>
+            ))}
+            {demographicStats.gender.length === 0 ? (
+              <p className="text-[11px] font-semibold text-slate-500">No gender data in selected report scope.</p>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="border border-[#cbd5e1] bg-white p-4">
+          <h3 className="mb-4 text-[14px] font-bold text-blue-900">Client Type Distribution</h3>
+          <div className="flex items-center justify-center">
+            <PieChart data={demographicStats.clientType} className="w-32 h-32" />
+          </div>
+          <div className="mt-4 space-y-2">
+            {demographicStats.clientType.map((item) => (
+              <div key={item.label} className="flex items-center justify-between text-[12px]">
+                <span className="inline-flex items-center gap-2 text-slate-600">
+                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.color}`} />
+                  {item.label}
+                </span>
+                <span className="font-bold text-slate-700">{item.percent}%</span>
+              </div>
+            ))}
+            {demographicStats.clientType.length === 0 ? (
+              <p className="text-[11px] font-semibold text-slate-500">No client type data in selected report scope.</p>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="border border-[#cbd5e1] bg-white p-4">
+          <h3 className="mb-4 text-[14px] font-bold text-blue-900">Age Group Distribution</h3>
+          <div className="flex items-center justify-center">
+            <PieChart data={demographicStats.ageGroup} className="w-32 h-32" />
+          </div>
+          <div className="mt-4 space-y-2">
+            {demographicStats.ageGroup.map((item) => (
+              <div key={item.label} className="flex items-center justify-between text-[12px]">
+                <span className="inline-flex items-center gap-2 text-slate-600">
+                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.color}`} />
+                  {item.label}
+                </span>
+                <span className="font-bold text-slate-700">{item.percent}%</span>
+              </div>
+            ))}
+            {demographicStats.ageGroup.length === 0 ? (
+              <p className="text-[11px] font-semibold text-slate-500">No age data in selected report scope.</p>
+            ) : null}
+          </div>
+        </article>
+      </section>
+
+      <section className="rounded-[2px] border border-[#cbd5e1] bg-[#f8fafc] p-4 mb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">Vulnerability</p>
+          <span className="text-[11px] font-semibold text-slate-500">Counts based on active date range and report scope</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {demographicStats.specialCategories.map((item) => (
+            <span
+              key={item.label}
+              className="inline-flex items-center rounded-[2px] border border-[#cbd5e1] bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700"
+            >
+              {item.label}: {item.count}
+            </span>
+          ))}
+          {demographicStats.specialCategories.length === 0 ? (
+            <p className="text-[11px] font-semibold text-slate-500">No vulnerability data in selected report scope.</p>
+          ) : null}
+        </div>
+      </section>
+
       <section className="grid grid-cols-1 gap-4 mb-6">
         <article className="border border-[#cbd5e1] bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className={pageHeadingStyles.sectionTitle}>Cases Over Time</h3>
-            <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#0b5a8c]">{casesTrendTitle}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-[#0b5a8c]">{casesTrendTitle}</span>
+              <div className="inline-flex overflow-hidden rounded-[2px] border border-[#cbd5e1] bg-white">
+                <button
+                  type="button"
+                  onClick={() => setCasesChartView('line')}
+                  className={`h-7 px-2.5 text-[11px] font-semibold ${
+                    casesChartView === 'line' ? 'bg-[#0b5a8c] text-white' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Line
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCasesChartView('bar')}
+                  className={`h-7 px-2.5 text-[11px] font-semibold ${
+                    casesChartView === 'bar' ? 'bg-[#0b5a8c] text-white' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Bar
+                </button>
+              </div>
+            </div>
           </div>
-          <svg width="100%" viewBox="0 0 530 220" preserveAspectRatio="none" className="h-[220px]">
-            {[0, 1, 2, 3, 4].map((idx) => (
-              <line
-                key={`cases-grid-${idx}`}
-                x1="20"
-                x2="510"
-                y1={30 + idx * 40}
-                y2={30 + idx * 40}
-                stroke="#e2e8f0"
-                strokeWidth="1"
-              />
-            ))}
-            <path d={casesLinePath} fill="none" stroke="#0b5a8c" strokeWidth="3" strokeLinecap="round" />
-            {casesTrendData.series.map((value, idx) => {
-              const min = Math.min(...casesTrendData.series)
-              const max = Math.max(...casesTrendData.series)
-              const range = Math.max(1, max - min)
-              const x = getLinePointX(idx, casesTrendData.series.length)
-              const y = 20 + (1 - (value - min) / range) * (220 - 40)
+          <div className="relative">
+            {casesHoveredIndex !== null && casesChartGeometry.points[casesHoveredIndex] ? (
+              <div className="pointer-events-none absolute right-2 top-2 z-10 rounded-[3px] border border-[#dbe7f3] bg-white/95 px-2.5 py-1.5 shadow-sm">
+                <p className="text-[11px] font-medium text-slate-600">
+                  {casesChartGeometry.points[casesHoveredIndex].label}
+                </p>
+                <p className="text-[14px] font-bold text-[#0b5a8c]">
+                  {casesChartGeometry.points[casesHoveredIndex].value} case(s)
+                </p>
+              </div>
+            ) : null}
 
-              return <circle key={`cases-pt-${idx}`} cx={x} cy={y} r="2.6" fill="#0b5a8c" />
-            })}
-            <g fill="#94a3b8" fontSize="8" fontWeight="700" letterSpacing="0.05em">
-              {casesTrendData.labels.map((label, index) => {
-                const shouldRender = index % casesTrendLabelStep === 0 || index === casesTrendData.labels.length - 1
-                if (!shouldRender) {
-                  return null
-                }
+            <svg
+              width="100%"
+              viewBox="0 0 530 220"
+              preserveAspectRatio="none"
+              className="h-[220px]"
+              onMouseLeave={() => setCasesHoveredIndex(null)}
+            >
+              <defs>
+                <linearGradient id="cases-area-gradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0b5a8c" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="#0b5a8c" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
 
-                return (
-                  <text key={`cases-${label}-${index}`} x={getLinePointX(index, casesTrendData.labels.length) - 12} y="214">
-                    {label}
-                  </text>
-                )
-              })}
-            </g>
-          </svg>
+              {[0, 1, 2, 3, 4].map((idx) => (
+                <line
+                  key={`cases-grid-${idx}`}
+                  x1="20"
+                  x2="510"
+                  y1={30 + idx * 40}
+                  y2={30 + idx * 40}
+                  stroke="#e2e8f0"
+                  strokeWidth="1"
+                />
+              ))}
+
+              <g fill="#64748b" fontSize="9" fontWeight="600">
+                {[0, 1, 2, 3, 4].map((idx) => {
+                  const y = 30 + idx * 40
+                  const value = (casesChartGeometry.maxValue - (casesChartGeometry.range / 4) * idx).toFixed(0)
+                  return (
+                    <text key={`cases-y-${idx}`} x="4" y={y + 2}>
+                      {value}
+                    </text>
+                  )
+                })}
+              </g>
+
+              {casesChartView === 'line' && casesAreaPath ? (
+                <path d={casesAreaPath} fill="url(#cases-area-gradient)" />
+              ) : null}
+
+              {casesChartView === 'line' ? (
+                <>
+                  <path d={casesLinePath} fill="none" stroke="#0b5a8c" strokeWidth="1.8" strokeLinecap="round" />
+                  {casesChartGeometry.points.map((point, idx) => {
+                    const isHovered = casesHoveredIndex === idx
+                    return (
+                      <circle
+                        key={`cases-pt-${idx}`}
+                        cx={point.x}
+                        cy={point.y}
+                        r={isHovered ? 3.6 : 2.2}
+                        fill={isHovered ? '#075985' : '#0b5a8c'}
+                      />
+                    )
+                  })}
+                </>
+              ) : (
+                <>
+                  {casesChartGeometry.points.map((point, idx) => {
+                    const isHovered = casesHoveredIndex === idx
+                    const barHeight = Math.max(0, casesChartGeometry.baselineY - point.y)
+                    if (barHeight <= 0) {
+                      return null
+                    }
+
+                    return (
+                      <rect
+                        key={`cases-bar-${idx}`}
+                        x={point.x - casesChartGeometry.barWidth / 2}
+                        y={point.y}
+                        width={casesChartGeometry.barWidth}
+                        height={barHeight}
+                        rx="3"
+                        fill={isHovered ? '#075985' : '#0b5a8c'}
+                        opacity={isHovered ? 0.95 : 0.82}
+                      />
+                    )
+                  })}
+                </>
+              )}
+
+              {casesChartGeometry.points.map((point, idx) => (
+                <rect
+                  key={`cases-hit-${idx}`}
+                  x={point.x - casesChartGeometry.slotWidth / 2}
+                  y="18"
+                  width={casesChartGeometry.slotWidth}
+                  height="186"
+                  fill="transparent"
+                  onMouseEnter={() => setCasesHoveredIndex(idx)}
+                />
+              ))}
+
+              <g fill="#64748b" fontSize="9" fontWeight="500">
+                {casesTrendData.labels.map((label, index) => {
+                  const shouldRender = index % casesTrendLabelStep === 0 || index === casesTrendData.labels.length - 1
+                  if (!shouldRender) {
+                    return null
+                  }
+
+                  return (
+                    <text key={`cases-${label}-${index}`} x={getLinePointX(index, casesTrendData.labels.length) - 12} y="214">
+                      {label}
+                    </text>
+                  )
+                })}
+              </g>
+            </svg>
+          </div>
         </article>
       </section>
 
@@ -1189,6 +1658,16 @@ export default function ReportsPage() {
       </section>
 
       <h2 className={`mb-3 mt-8 ${pageHeadingStyles.sectionTitle}`}>Referrals Breakdown</h2>
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-2 mb-4">
+        <MetricCard label="Total Referrals" value={`${kpiData.totalReferrals}`} accent="border-l-[#0b5a8c]" />
+        <MetricCard
+          label="Avg Referral Completion Days"
+          value={`${kpiData.averageReferralCompletionDays.toFixed(1)} Days`}
+          accent="border-l-[#0b7a75]"
+          trailing={<div className="h-[4px] w-8 rounded-full bg-[#0b7a75]" />}
+        />
+      </section>
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
         <article className="border border-[#cbd5e1] bg-white p-4">
           <h3 className="mb-4 text-[14px] font-bold text-blue-900">Referrals By Status</h3>
@@ -1242,52 +1721,6 @@ export default function ReportsPage() {
               </div>
             ))}
           </div>
-        </article>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 mb-6">
-        <article className="border border-[#cbd5e1] bg-white p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className={pageHeadingStyles.sectionTitle}>Referrals Over Time</h3>
-            <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#0b5a8c]">{trendTitle}</span>
-          </div>
-          <svg width="100%" viewBox="0 0 530 220" preserveAspectRatio="none" className="h-[220px]">
-            {[0, 1, 2, 3, 4].map((idx) => (
-              <line
-                key={`grid-${idx}`}
-                x1="20"
-                x2="510"
-                y1={30 + idx * 40}
-                y2={30 + idx * 40}
-                stroke="#e2e8f0"
-                strokeWidth="1"
-              />
-            ))}
-            <path d={linePath} fill="none" stroke="#0b5a8c" strokeWidth="3" strokeLinecap="round" />
-            {trendData.series.map((value, idx) => {
-              const min = Math.min(...trendData.series)
-              const max = Math.max(...trendData.series)
-              const range = Math.max(1, max - min)
-              const x = getLinePointX(idx, trendData.series.length)
-              const y = 20 + (1 - (value - min) / range) * (220 - 40)
-
-              return <circle key={`pt-${idx}`} cx={x} cy={y} r="2.6" fill="#0b5a8c" />
-            })}
-            <g fill="#94a3b8" fontSize="8" fontWeight="700" letterSpacing="0.05em">
-              {trendData.labels.map((label, index) => {
-                const shouldRender = index % trendLabelStep === 0 || index === trendData.labels.length - 1
-                if (!shouldRender) {
-                  return null
-                }
-
-                return (
-                  <text key={`${label}-${index}`} x={getLinePointX(index, trendData.labels.length) - 12} y="214">
-                    {label}
-                  </text>
-                )
-              })}
-            </g>
-          </svg>
         </article>
       </section>
 
