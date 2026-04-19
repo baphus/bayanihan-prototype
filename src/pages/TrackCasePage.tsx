@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
 import { toCaseHealthStatus, type TrackingAgencyCardData } from '../data/unifiedData'
 import { getManagedTrackCasePageData } from '../data/caseLifecycleStore'
 import TrackingNotFoundState from '../components/TrackingNotFoundState'
+import ServqualFeedbackPanel from '../components/ServqualFeedbackPanel'
 
 type AgencyCardProps = TrackingAgencyCardData & {
   latestMilestoneHref?: string
@@ -144,6 +145,12 @@ export default function TrackCasePage() {
     return Array.from(unique).sort((a, b) => a.localeCompare(b))
   }, [pageData.caseTimeline])
 
+  useEffect(() => {
+    if (timelineAgencyFilter !== 'ALL' && !timelineAgencies.includes(timelineAgencyFilter)) {
+      setTimelineAgencyFilter('ALL')
+    }
+  }, [timelineAgencyFilter, timelineAgencies])
+
   const filteredTimeline = useMemo(() => {
     if (timelineAgencyFilter === 'ALL') {
       return pageData.caseTimeline
@@ -163,14 +170,12 @@ export default function TrackCasePage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-[1100px] px-5 py-9">
+        <ServqualFeedbackPanel trackingId={trackingId} />
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <section className="space-y-[44px] lg:col-span-8">
             <header className="border-l-[3px] border-primary bg-white px-[28px] py-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
               <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                 <div>
-                  <p className="font-label text-[8px] font-[800] uppercase tracking-[0.18em] text-outline">
-                    Official Case Ledger
-                  </p>
                   <h1 className="mt-[2px] font-headline text-[26px] font-[900] uppercase tracking-[-0.02em] text-primary">
                     Tracking ID: {trackingId}
                   </h1>
@@ -209,9 +214,9 @@ export default function TrackCasePage() {
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Date of Birth</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.ofw.dateOfBirth}</dd></div>
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Gender</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.ofw.gender}</dd></div>
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Home Address</dt><dd className="font-bold text-[11.5px] text-on-surface leading-snug">{pageData.caseOverview.ofw.homeAddress}</dd></div>
-                      <div>
-                        <dt className="mb-[6px] text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant">Special Categories</dt>
-                        {pageData.caseOverview.ofw.specialCategories.length > 0 ? (
+                      {pageData.caseOverview.ofw.specialCategories.length > 0 ? (
+                        <div>
+                          <dt className="mb-[6px] text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant">Special Categories</dt>
                           <dd className="flex flex-wrap gap-[6px]">
                             {pageData.caseOverview.ofw.specialCategories.map((category) => (
                               <span key={category} className="flex items-center gap-[2px] rounded-[3px] bg-[#eef4f9] px-[6px] py-[3px] text-[8px] font-[700] text-primary">
@@ -220,10 +225,8 @@ export default function TrackCasePage() {
                               </span>
                             ))}
                           </dd>
-                        ) : (
-                          <dd className="text-[10px] font-semibold text-on-surface-variant">No declared special categories</dd>
-                        )}
-                      </div>
+                        </div>
+                      ) : null}
                     </dl>
                   </div>
 
@@ -234,6 +237,19 @@ export default function TrackCasePage() {
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Contact Number</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.contactNumber}</dd></div>
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Email Address</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.emailAddress}</dd></div>
                       <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Home Address</dt><dd className="font-bold text-[11.5px] text-on-surface leading-snug">{pageData.caseOverview.nextOfKin.homeAddress}</dd></div>
+                      {pageData.caseOverview.nextOfKin.specialCategories.length > 0 ? (
+                        <div>
+                          <dt className="mb-[6px] text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant">Special Categories</dt>
+                          <dd className="flex flex-wrap gap-[6px]">
+                            {pageData.caseOverview.nextOfKin.specialCategories.map((category) => (
+                              <span key={category} className="flex items-center gap-[2px] rounded-[3px] bg-[#eef4f9] px-[6px] py-[3px] text-[8px] font-[700] text-primary">
+                                <span className="material-symbols-outlined text-[10px]" style={{ fontVariationSettings: "'FILL' 1" }}>escalator_warning</span>
+                                {category}
+                              </span>
+                            ))}
+                          </dd>
+                        </div>
+                      ) : null}
                     </dl>
                   </div>
 
@@ -277,7 +293,7 @@ export default function TrackCasePage() {
 
           <aside className="col-span-1 lg:col-span-4 pl-0 lg:pl-4 mt-6 lg:mt-0">
             <div id="case-timeline" className="h-full bg-[#f4f6f8] p-7 shadow-sm">
-              <div className="mb-[28px] flex items-center justify-between border-b border-surface-container-high pb-[18px]">
+              <div className="mb-[28px] flex flex-wrap items-center justify-between gap-2 border-b border-surface-container-high pb-[18px]">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-[18px] text-primary">history</span>
                   <h2 className="text-[11px] font-black uppercase tracking-[0.14em] text-primary">Case Timeline</h2>
@@ -285,7 +301,7 @@ export default function TrackCasePage() {
                 <select
                   value={timelineAgencyFilter}
                   onChange={(event) => setTimelineAgencyFilter(event.target.value)}
-                  className="h-[30px] rounded-[3px] border border-surface-container-high bg-white px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-on-surface"
+                  className="h-[30px] w-[170px] max-w-full shrink-0 rounded-[3px] border border-surface-container-high bg-white px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-on-surface"
                 >
                   <option value="ALL">All agencies</option>
                   {timelineAgencies.map((agency) => (
@@ -294,17 +310,19 @@ export default function TrackCasePage() {
                 </select>
               </div>
 
-              <div className="relative pl-[32px] pt-1">
-                <div className="absolute left-[13px] top-[14px] bottom-6 w-[1.5px] bg-[#c1c7d1]/60" />
-                <div className="space-y-[32px]">
+              <div className="relative pt-1">
+                <div className="absolute left-[10px] top-[14px] bottom-6 w-[1.5px] bg-[#c1c7d1]/60" />
+                <div className="flex flex-col-reverse gap-[32px]">
                   {filteredTimeline.map((item, index) => (
-                    <article key={`${item.date}-${index}`} className="relative pl-1">
-                      <div className="absolute -left-[30px] top-[2px] h-[22px] w-[22px] overflow-hidden rounded-full border border-white bg-white shadow-sm">
-                        <img src={item.logoUrl} alt={`${item.agency} timeline source`} className="h-full w-full object-contain p-[1px]" />
+                    <article key={`${item.date}-${index}`} className="relative grid grid-cols-[22px_1fr] items-start gap-3">
+                      <div className="z-10 flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full border border-white bg-white shadow-sm">
+                        <img src={item.logoUrl} alt={`${item.agency} timeline source`} className="h-full w-full object-cover" />
                       </div>
-                      <p className="text-[7.5px] font-extrabold uppercase tracking-[0.1em] text-primary mb-[2px]">{item.date}</p>
-                      <h3 className="text-[10px] font-bold leading-[1.3] text-on-surface mb-[3px]">{item.title}</h3>
-                      <p className="text-[9px] leading-[1.4] text-slate-500 whitespace-pre-wrap">{item.detail}</p>
+                      <div className="min-w-0">
+                        <p className="mb-[2px] text-[7.5px] font-extrabold uppercase tracking-[0.1em] text-primary">{item.date}</p>
+                        <h3 className="mb-[3px] text-[10px] font-bold leading-[1.3] text-on-surface">{item.title}</h3>
+                        <p className="whitespace-pre-wrap text-[9px] leading-[1.4] text-slate-500">{item.detail}</p>
+                      </div>
                     </article>
                   ))}
                 </div>

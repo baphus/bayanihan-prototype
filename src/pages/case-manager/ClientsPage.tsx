@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
-import { CASE_MANAGER_CASES, formatDisplayDateTime } from '../../data/unifiedData'
+import { CASE_MANAGER_CASES, formatDisplayDateTime, getClientPersona } from '../../data/unifiedData'
 import { getNextOfKinForClient } from '../../data/unifiedData'
 
 type OpenCasesFilter = 'ALL' | 'HAS_OPEN_CASES' | 'NO_OPEN_CASES'
@@ -10,9 +10,8 @@ type CaseVolumeFilter = 'ALL' | 'SINGLE_CASE' | 'MULTI_CASE'
 
 type ClientRow = {
   id: string
-  ofwName: string
-  nextOfKinName: string
-  nextOfKinContact: string
+  clientName: string
+  clientContact: string
   totalCases: number
   openCases: number
   caseRefs: Array<{ id: string; caseNo: string }>
@@ -30,11 +29,8 @@ export default function ClientsPage() {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
-    ofwName: true,
-    nextOfKinName: true,
-    nextOfKinContact: true,
-    totalCases: true,
-    openCases: true,
+    clientName: true,
+    clientContact: true,
     caseRefs: true,
     lastUpdated: true,
     actions: true,
@@ -44,11 +40,11 @@ export default function ClientsPage() {
     const grouped = CASE_MANAGER_CASES.reduce<Record<string, ClientRow>>((acc, item) => {
       if (!acc[item.clientName]) {
         const kin = getNextOfKinForClient(item.clientName)
+        const persona = getClientPersona(item.caseNo)
         acc[item.clientName] = {
           id: item.clientName,
-          ofwName: item.clientName,
-          nextOfKinName: kin.name,
-          nextOfKinContact: kin.contact,
+          clientName: item.clientType === 'Next of Kin' ? kin.name : item.clientName,
+          clientContact: item.clientType === 'Next of Kin' ? kin.contact : item.ofwProfile?.contact || persona.ofwContact,
           totalCases: 0,
           openCases: 0,
           caseRefs: [],
@@ -65,7 +61,11 @@ export default function ClientsPage() {
       }
 
       if (new Date(item.updatedAt).getTime() > new Date(row.lastUpdated).getTime()) {
+        const persona = getClientPersona(item.caseNo)
         row.lastUpdated = item.updatedAt
+        const kin = getNextOfKinForClient(item.clientName)
+        row.clientName = item.clientType === 'Next of Kin' ? kin.name : item.clientName
+        row.clientContact = item.clientType === 'Next of Kin' ? kin.contact : item.ofwProfile?.contact || persona.ofwContact
       }
 
       return acc
@@ -76,7 +76,7 @@ export default function ClientsPage() {
         ...row,
         caseRefs: row.caseRefs.sort((a, b) => a.caseNo.localeCompare(b.caseNo)),
       }))
-      .sort((a, b) => a.ofwName.localeCompare(b.ofwName))
+      .sort((a, b) => a.clientName.localeCompare(b.clientName))
   }, [])
 
   const filteredRows = useMemo(() => {
@@ -86,7 +86,7 @@ export default function ClientsPage() {
       const caseTokens = row.caseRefs.map((caseRef) => caseRef.caseNo).join(' ')
       const matchesSearch =
         query.length === 0 ||
-        [row.ofwName, row.nextOfKinName, row.nextOfKinContact, caseTokens].join(' ').toLowerCase().includes(query)
+        [row.clientName, row.clientContact, caseTokens].join(' ').toLowerCase().includes(query)
       const matchesOpenCases =
         openCasesFilter === 'ALL' ||
         (openCasesFilter === 'HAS_OPEN_CASES' ? row.openCases > 0 : row.openCases === 0)
@@ -102,8 +102,8 @@ export default function ClientsPage() {
     return {
       totalClients: rows.length,
       totalCases: rows.reduce((acc, row) => acc + row.totalCases, 0),
-      withOpenCases: rows.filter((row) => row.openCases > 0).length,
-      withMultipleCases: rows.filter((row) => row.totalCases > 1).length,
+      ofwCases: CASE_MANAGER_CASES.filter((item) => item.clientType === 'Overseas Filipino Worker').length,
+      nokCases: CASE_MANAGER_CASES.filter((item) => item.clientType === 'Next of Kin').length,
     }
   }, [rows])
 
@@ -161,32 +161,15 @@ export default function ClientsPage() {
 
   const columns: Column<ClientRow>[] = [
     {
-      key: 'ofwName',
-      title: 'OFW NAME',
-      render: (row) => <span className="text-[13px] font-semibold text-slate-800">{row.ofwName}</span>,
+      key: 'clientName',
+      title: 'CLIENT NAME',
+      render: (row) => <span className="text-[13px] font-semibold text-slate-800">{row.clientName}</span>,
     },
     {
-      key: 'nextOfKinName',
-      title: 'NEXT OF KIN',
-      render: (row) => <span className="text-[12px] text-slate-700">{row.nextOfKinName}</span>,
-    },
-    {
-      key: 'nextOfKinContact',
-      title: 'NOK CONTACT',
+      key: 'clientContact',
+      title: 'CONTACT',
       className: 'whitespace-nowrap',
-      render: (row) => <span className="text-[12px] text-slate-600">{row.nextOfKinContact}</span>,
-    },
-    {
-      key: 'totalCases',
-      title: 'TOTAL CASES',
-      className: 'text-right',
-      render: (row) => <span className="text-[13px] font-bold text-slate-700">{row.totalCases}</span>,
-    },
-    {
-      key: 'openCases',
-      title: 'OPEN CASES',
-      className: 'text-right',
-      render: (row) => <span className="text-[13px] font-bold text-[#0b5384]">{row.openCases}</span>,
+      render: (row) => <span className="text-[12px] text-slate-600">{row.clientContact}</span>,
     },
     {
       key: 'caseRefs',
@@ -194,12 +177,13 @@ export default function ClientsPage() {
       render: (row) => (
         <div className="flex flex-wrap items-center gap-1.5">
           {row.caseRefs.slice(0, 3).map((caseRef) => (
-            <span
+            <Link
               key={caseRef.id}
+              to={`/case-manager/cases/${caseRef.id}`}
               className="inline-flex rounded-[3px] border border-[#bfdbfe] bg-[#eff6ff] px-2 py-0.5 text-[11px] font-bold text-[#0b5384]"
             >
               {caseRef.caseNo}
-            </span>
+            </Link>
           ))}
           {row.caseRefs.length > 3 ? (
             <span className="text-[11px] font-semibold text-slate-500">+{row.caseRefs.length - 3} more</span>
@@ -254,8 +238,8 @@ export default function ClientsPage() {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="TOTAL CLIENTS" value={kpis.totalClients} accent="border-[#0b5384]" />
         <KpiCard title="TOTAL CASES" value={kpis.totalCases} accent="border-[#0284c7]" />
-        <KpiCard title="WITH OPEN CASES" value={kpis.withOpenCases} accent="border-[#f59e0b]" />
-        <KpiCard title="MULTI-CASE CLIENTS" value={kpis.withMultipleCases} accent="border-[#16a34a]" />
+        <KpiCard title="OFW CASES" value={kpis.ofwCases} accent="border-[#f59e0b]" />
+        <KpiCard title="NOK CASES" value={kpis.nokCases} accent="border-[#16a34a]" />
       </section>
 
       <UnifiedTable

@@ -119,7 +119,13 @@ function getCaseAgeDays(createdAt: string, updatedAt: string): string {
   return `${days} day${days > 1 ? 's' : ''}`
 }
 
-function buildCaseTimeline(caseId: string, createdAt: string, referrals: ReferralRow[]): TimelineItem[] {
+function buildCaseTimeline(
+  caseId: string,
+  createdAt: string,
+  referrals: ReferralRow[],
+  caseStatus: 'OPEN' | 'CLOSED',
+  caseUpdatedAt: string,
+): TimelineItem[] {
   const actors = getReferralActorsForCase(caseId)
   const timeline: TimelineItem[] = [
     {
@@ -147,17 +153,6 @@ function buildCaseTimeline(caseId: string, createdAt: string, referrals: Referra
     })
 
     if (referralRow.referralStatus === 'PENDING') {
-      timeline.push({
-        id: `${referralRow.id}-pending`,
-        actorType: 'Agency',
-        agency: referralRow.agency,
-        agencyId: referralRow.referral.agencyId,
-        logoType: 'agency',
-        actorName: actors.agencyFocal.name,
-        title: 'Awaiting Intake',
-        description: 'Referral is pending agency intake acknowledgment.',
-        timestamp: withOffsetMinutes(referralRow.dateReferredIso, 15),
-      })
       return
     }
 
@@ -173,19 +168,6 @@ function buildCaseTimeline(caseId: string, createdAt: string, referrals: Referra
           title: 'Referral Accepted',
           description: 'Agency accepted the referral and started processing.',
           timestamp: withOffsetMinutes(referralRow.dateReferredIso, 30),
-        },
-        {
-          id: `${referralRow.id}-milestone`,
-          actorType: 'Agency',
-          agency: referralRow.agency,
-          agencyId: referralRow.referral.agencyId,
-          logoType: 'agency',
-          actorName: actors.agencyFocal.name,
-          milestone: referralRow.latestMilestone,
-          isMilestoneUpdate: true,
-          title: `Milestone "${referralRow.latestMilestone}"`,
-          description: 'Agency posted a milestone update for this referral.',
-          timestamp: referralRow.updatedAtIso,
         },
       )
       return
@@ -203,19 +185,6 @@ function buildCaseTimeline(caseId: string, createdAt: string, referrals: Referra
           title: 'Referral Accepted',
           description: 'Agency accepted the referral and started processing.',
           timestamp: withOffsetMinutes(referralRow.dateReferredIso, 20),
-        },
-        {
-          id: `${referralRow.id}-milestone`,
-          actorType: 'Agency',
-          agency: referralRow.agency,
-          agencyId: referralRow.referral.agencyId,
-          logoType: 'agency',
-          actorName: actors.agencyFocal.name,
-          milestone: referralRow.latestMilestone,
-          isMilestoneUpdate: true,
-          title: `Milestone "${referralRow.latestMilestone}"`,
-          description: 'Agency posted a milestone update before completion.',
-          timestamp: withOffsetMinutes(referralRow.updatedAtIso, -45),
         },
         {
           id: `${referralRow.id}-completed`,
@@ -244,6 +213,28 @@ function buildCaseTimeline(caseId: string, createdAt: string, referrals: Referra
       timestamp: referralRow.updatedAtIso,
     })
   })
+
+  if (caseStatus === 'CLOSED') {
+    const latestReferralUpdate = referrals.reduce((latest, row) => {
+      return new Date(row.updatedAtIso).getTime() > new Date(latest).getTime() ? row.updatedAtIso : latest
+    }, createdAt)
+
+    const closeTimestamp =
+      new Date(caseUpdatedAt).getTime() >= new Date(latestReferralUpdate).getTime()
+        ? caseUpdatedAt
+        : withOffsetMinutes(latestReferralUpdate, 1)
+
+    timeline.push({
+      id: `${caseId}-case-closed`,
+      actorType: 'Case Manager',
+      agency: 'Bayanihan',
+      logoType: 'bayanihan',
+      actorName: actors.caseManager.name,
+      title: 'Case Closed by Case Manager',
+      description: 'Case Manager closed this case after referral processing was completed.',
+      timestamp: closeTimestamp,
+    })
+  }
 
   timeline.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
@@ -282,8 +273,14 @@ export default function CaseViewPage(): JSX.Element {
   }
 
   const persona = getClientPersona(caseRecord.caseNo)
+  const primaryClientName =
+    caseRecord.clientType === 'Next of Kin'
+      ? caseRecord.nextOfKinProfile?.fullName || persona.kinName
+      : caseRecord.ofwProfile?.fullName || persona.ofwName
   const caseStatus = toCaseHealthStatus(caseRecord.status)
-  const specialCategories = getSpecialCategories(caseRecord.caseNo)
+  const fallbackSpecialCategories = getSpecialCategories(caseRecord.caseNo)
+  const ofwSpecialCategories = caseRecord.ofwProfile?.specialCategories || fallbackSpecialCategories
+  const nextOfKinSpecialCategories = caseRecord.nextOfKinProfile?.specialCategories || fallbackSpecialCategories
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false)
   const [isReferAgencyOpen, setIsReferAgencyOpen] = useState(false)
   const [editableClientType, setEditableClientType] = useState(caseRecord.clientType)
@@ -313,7 +310,7 @@ export default function CaseViewPage(): JSX.Element {
       updatedAtIso: referral.updatedAt,
     }))
   }, [caseRecord.id, refreshKey])
-  const timeline = buildCaseTimeline(caseRecord.id, caseRecord.createdAt, referralRows)
+  const timeline = buildCaseTimeline(caseRecord.id, caseRecord.createdAt, referralRows, caseStatus, caseRecord.updatedAt)
   const [timelineAgencyFilter, setTimelineAgencyFilter] = useState('ALL')
 
   const referredAgencyIds = useMemo(() => new Set(referralRows.map((row) => row.referral.agencyId)), [referralRows])
@@ -363,7 +360,7 @@ export default function CaseViewPage(): JSX.Element {
       id: referralId,
       caseId: caseRecord.id,
       caseNo: caseRecord.caseNo,
-      clientName: caseRecord.clientName,
+      clientName: primaryClientName,
       service: resolveStakeholderService(referAgencyId, referServiceValue.trim()),
       agencyId: selectedReferAgency.id,
       agencyName: selectedReferAgency.name,
@@ -534,17 +531,19 @@ export default function CaseViewPage(): JSX.Element {
                   <InfoCell label="Home Address" value={formatAddressParts(persona.ofwAddress)} fullRow />
                 </div>
 
-                <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3">
-                  <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Special Categories</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-4">
-                    {(['Senior Citizen', 'PWD', 'Solo Parent'] as SpecialCategory[]).map((category) => (
-                      <label key={category} className="inline-flex items-center gap-2 text-[12px] text-slate-600">
-                        <input type="checkbox" checked={specialCategories.includes(category)} readOnly className="h-3.5 w-3.5" />
-                        <span>{category}</span>
-                      </label>
-                    ))}
+                {ofwSpecialCategories.length > 0 ? (
+                  <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3">
+                    <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Special Categories</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-4">
+                      {(['Senior Citizen', 'PWD', 'Solo Parent'] as SpecialCategory[]).map((category) => (
+                        <label key={category} className="inline-flex items-center gap-2 text-[12px] text-slate-600">
+                          <input type="checkbox" checked={ofwSpecialCategories.includes(category)} readOnly className="h-3.5 w-3.5" />
+                          <span>{category}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </Subsection>
 
               <Subsection title="Work History">
@@ -562,6 +561,19 @@ export default function CaseViewPage(): JSX.Element {
                   <InfoCell label="Email Address" value={persona.kinEmail} />
                   <InfoCell label="Home Address" value={formatAddressParts(persona.kinAddress)} fullRow />
                 </div>
+                {nextOfKinSpecialCategories.length > 0 ? (
+                  <div className="mt-3 rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3">
+                    <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Special Categories</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-4">
+                      {(['Senior Citizen', 'PWD', 'Solo Parent'] as SpecialCategory[]).map((category) => (
+                        <label key={category} className="inline-flex items-center gap-2 text-[12px] text-slate-600">
+                          <input type="checkbox" checked={nextOfKinSpecialCategories.includes(category)} readOnly className="h-3.5 w-3.5" />
+                          <span>{category}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </Subsection>
             </div>
           </CardSection>
@@ -623,11 +635,11 @@ export default function CaseViewPage(): JSX.Element {
           </CardSection>
 
           <CardSection title="Case Timeline">
-            <div className="flex items-center justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <select
                 value={timelineAgencyFilter}
                 onChange={(event) => setTimelineAgencyFilter(event.target.value)}
-                className="h-[30px] rounded-[3px] border border-[#cbd5e1] bg-white px-2 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-600"
+                className="h-[30px] w-[170px] max-w-full shrink-0 rounded-[3px] border border-[#cbd5e1] bg-white px-2 text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-600"
               >
                 <option value="ALL">All agencies</option>
                 {timelineAgencies.map((agency) => (
@@ -635,17 +647,17 @@ export default function CaseViewPage(): JSX.Element {
                 ))}
               </select>
             </div>
-            <div className="mt-4 relative pl-4">
-              <div className="absolute left-[4px] top-1 bottom-1 w-px bg-[#cbd5e1]" />
+            <div className="relative mt-4">
+              <div className="absolute left-[10px] top-1 bottom-1 w-px bg-[#cbd5e1]" />
               <div className="flex flex-col-reverse gap-4">
                 {filteredTimeline.map((item) => {
                   const logoSrc = getTimelineLogoSrc(item.logoType, item.agencyId)
                   return (
-                    <div key={item.id} className="relative flex items-start gap-3">
-                      <div className="mt-0.5 -ml-[18px] h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm z-10">
-                        <img src={logoSrc} alt="Timeline source" className="h-full w-full object-contain p-[1px]" />
+                    <div key={item.id} className="relative grid grid-cols-[22px_1fr] items-start gap-3">
+                      <div className="z-10 mt-0.5 flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full border border-white bg-white shadow-sm">
+                        <img src={logoSrc} alt="Timeline source" className="h-full w-full object-cover" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-[11px] leading-5 font-semibold text-slate-700">{item.title}</p>
                         <p className="text-[11px] leading-5 text-slate-600">{item.description}</p>
                         <p className="mt-0.5 text-[10px] text-slate-400">
@@ -723,7 +735,7 @@ export default function CaseViewPage(): JSX.Element {
 
             <div className="grid grid-cols-1 gap-4 px-5 py-4 md:grid-cols-2">
               <div className="md:col-span-2 rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2 text-[12px] text-slate-700">
-                Case: <span className="font-semibold">{caseRecord.caseNo}</span> ({caseRecord.clientName})
+                Case: <span className="font-semibold">{caseRecord.caseNo}</span> ({primaryClientName})
               </div>
 
               <div>

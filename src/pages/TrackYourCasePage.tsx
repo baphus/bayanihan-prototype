@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
+import FaqSection from '../components/FaqSection'
 
 export default function TrackYourCasePage() {
   const navigate = useNavigate()
@@ -34,8 +35,6 @@ export default function TrackYourCasePage() {
         <div className="w-full max-w-3xl flex flex-col items-center text-center">
           
           <div className="mb-4 inline-flex items-center gap-2 bg-[#Eef4fb] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#0e5b8d] rounded-sm">
-            <span className="material-symbols-outlined text-[14px]">verified_user</span>
-            Official Government Portal
           </div>
           
           <h1 className="mb-4 text-4xl sm:text-5xl font-black uppercase text-[#111827] tracking-tight">
@@ -95,43 +94,12 @@ export default function TrackYourCasePage() {
             </form>
           </div>
           
-          {/* Features below */}
-          <div className="grid w-full grid-cols-1 md:grid-cols-3 gap-6 text-left">
-            
-            <div className="bg-slate-100 p-6 border-l-[3px] border-l-slate-300">
-              <div className="text-[#0b5c92] mb-3">
-                <span className="material-symbols-outlined">history</span>
-              </div>
-              <h3 className="text-xs font-bold uppercase tracking-widest mb-2 text-slate-700">Real-Time History</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Access complete audit trails of all administrative actions on your case.
-              </p>
-            </div>
-            
-            <div className="bg-slate-100 p-6 border-l-[3px] border-l-slate-300">
-              <div className="text-[#0b5c92] mb-3">
-                <span className="material-symbols-outlined">notifications_active</span>
-              </div>
-              <h3 className="text-xs font-bold uppercase tracking-widest mb-2 text-slate-700">Instant Alerts</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Get immediate updates as your application moves through the pipeline.
-              </p>
-            </div>
-            
-            <div className="bg-slate-100 p-6 border-l-[3px] border-l-slate-300">
-              <div className="text-[#0b5c92] mb-3">
-                <span className="material-symbols-outlined">security</span>
-              </div>
-              <h3 className="text-xs font-bold uppercase tracking-widest mb-2 text-slate-700">Secure Data</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Encrypted ledger ensuring your sensitive documents remain protected.
-              </p>
-            </div>
-            
-          </div>
-          
         </div>
       </main>
+
+      <div className="w-full">
+        <FaqSection categories={['Tracking Your Case']} />
+      </div>
 
       <AppFooter />
     </div>

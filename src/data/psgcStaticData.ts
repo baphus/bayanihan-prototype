@@ -5,72 +5,8 @@ export type StaticAddressOption = {
 
 export const STATIC_REGIONS: StaticAddressOption[] = [
   {
-    "code": "1900000000",
-    "name": "BARMM"
-  },
-  {
-    "code": "0500000000",
-    "name": "Bicol Region"
-  },
-  {
-    "code": "0200000000",
-    "name": "Cagayan Valley"
-  },
-  {
-    "code": "0400000000",
-    "name": "CALABARZON"
-  },
-  {
-    "code": "1400000000",
-    "name": "CAR"
-  },
-  {
-    "code": "1600000000",
-    "name": "Caraga"
-  },
-  {
-    "code": "0300000000",
-    "name": "Central Luzon"
-  },
-  {
     "code": "0700000000",
     "name": "Central Visayas"
-  },
-  {
-    "code": "1100000000",
-    "name": "Davao Region"
-  },
-  {
-    "code": "0800000000",
-    "name": "Eastern Visayas"
-  },
-  {
-    "code": "0100000000",
-    "name": "Ilocos Region"
-  },
-  {
-    "code": "1700000000",
-    "name": "MIMAROPA Region"
-  },
-  {
-    "code": "1300000000",
-    "name": "NCR"
-  },
-  {
-    "code": "1000000000",
-    "name": "Northern Mindanao"
-  },
-  {
-    "code": "1200000000",
-    "name": "SOCCSKSARGEN"
-  },
-  {
-    "code": "0600000000",
-    "name": "Western Visayas"
-  },
-  {
-    "code": "0900000000",
-    "name": "Zamboanga Peninsula"
   }
 ]
 

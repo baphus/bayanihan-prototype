@@ -335,8 +335,8 @@ export default function LandingPage() {
             <p className="mx-auto mb-8 max-w-2xl text-lg leading-relaxed text-on-surface-variant">
               Are you a government agency or licensed stakeholder? Join our unified platform to streamline referrals and provide faster assistance to our OFWs.
             </p>
-            <AppButton type="button" variant="outline" icon="handshake" className="rounded-sm border-2 border-primary px-6 py-3">
-              Inquire about Partnership
+            <AppButton type="button" onClick={() => navigate('/contact')} variant="outline" icon="handshake" className="rounded-sm border-2 border-primary px-6 py-3">
+              Inquire Now
             </AppButton>
           </div>
         </section>

@@ -12,7 +12,7 @@ import {
   toCaseHealthStatus,
   type CaseManagerReferral,
 } from '../../data/unifiedData'
-import { createManagedReferral, getManagedCases, getManagedReferrals } from '../../data/caseLifecycleStore'
+import { createManagedReferral, getManagedCases, getManagedLatestMilestone, getManagedReferrals } from '../../data/caseLifecycleStore'
 
 type StatusFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
 
@@ -67,6 +67,22 @@ export default function ReferralsPage() {
     }
   }, [rows])
 
+  const latestUpdateByReferralId = useMemo(() => {
+    return rows.reduce<Record<string, string>>((acc, row) => {
+      const milestone = getManagedLatestMilestone(row.id, '')
+      acc[row.id] =
+        milestone ||
+        (row.status === 'PENDING'
+          ? 'Awaiting agency acceptance'
+          : row.status === 'PROCESSING'
+            ? 'Referral is being processed'
+            : row.status === 'COMPLETED'
+              ? 'Referral completed by agency'
+              : 'Referral returned by agency')
+      return acc
+    }, {})
+  }, [rows])
+
   const columns: Column<CaseManagerReferral>[] = [
     {
       key: 'caseNo',
@@ -87,6 +103,11 @@ export default function ReferralsPage() {
       key: 'service',
       title: 'SERVICE',
       render: (row) => <span className="text-[13px] text-slate-600">{row.service}</span>,
+    },
+    {
+      key: 'latestUpdate',
+      title: 'LATEST UPDATE',
+      render: (row) => <span className="text-[12px] text-slate-700">{latestUpdateByReferralId[row.id]}</span>,
     },
     {
       key: 'status',

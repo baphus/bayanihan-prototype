@@ -1,9 +1,11 @@
 import { useMemo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Cloud, Database, HardDriveDownload, ShieldCheck, BellRing, Activity, ServerCog, KeyRound } from 'lucide-react'
+import NotificationBell from '../../components/ui/NotificationBell'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import {
   buildSystemAdminOversightActivityLogs,
+  getDashboardNotificationDeliveryLogsByRole,
   getSystemAdminGovernanceHealth,
   getSystemAdminIntegrationSettings,
   getSystemAdminNotificationDeliveryLogs,
@@ -40,6 +42,8 @@ export default function DashboardPage() {
     }
   }, [])
 
+  const dashboardNotifications = useMemo(() => getDashboardNotificationDeliveryLogsByRole('System Admin'), [])
+
   const totals = useMemo(
     () =>
       cards.reduce(
@@ -67,9 +71,14 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-6">
-      <header>
-        <h1 className={pageHeadingStyles.pageTitle}>System Admin Dashboard</h1>
-        <p className={pageHeadingStyles.pageSubtitle}>Monitor platform operations, storage integrations, security posture, and recent system activity.</p>
+      <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className={pageHeadingStyles.pageTitle}>System Admin Dashboard</h1>
+          <p className={pageHeadingStyles.pageSubtitle}>Monitor platform operations, storage integrations, security posture, and recent system activity.</p>
+        </div>
+        <div className="self-start md:self-auto">
+          <NotificationBell notifications={dashboardNotifications} viewAllHref="/system-admin/notifications" />
+        </div>
       </header>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -185,7 +185,28 @@ export default function NewCasePage() {
   )
 
   useEffect(() => {
-    if (clientSource !== 'existing' || !selectedExistingClientProfile) {
+    if (clientSource === 'new') {
+      setOfwNameParts({ firstName: '', middleInitial: '', lastName: '', suffix: '' })
+      setOfwBirthDate('')
+      setOfwGender('Male')
+      setOfwEmail('')
+      setOfwContact('')
+      setOfwAddress(createEmptyAddressParts())
+      setLastCountry('')
+      setLastJobPosition('')
+      setArrivalDate('')
+      setHasNextOfKin(true)
+      setKinNameParts({ firstName: '', middleInitial: '', lastName: '', suffix: '' })
+      setKinContact('')
+      setKinEmail('')
+      setKinAddress(createEmptyAddressParts())
+      setSpecialSenior(false)
+      setSpecialPwd(false)
+      setSpecialSoloParent(false)
+      return
+    }
+
+    if (!selectedExistingClientProfile) {
       return
     }
 
@@ -275,6 +296,11 @@ export default function NewCasePage() {
             contact: kinContact,
             email: kinEmail,
             address: { ...kinAddress },
+            specialCategories: [
+              specialSenior ? 'Senior Citizen' : '',
+              specialPwd ? 'PWD' : '',
+              specialSoloParent ? 'Solo Parent' : '',
+            ].filter(Boolean) as string[],
           }
         : undefined,
       workHistory: {

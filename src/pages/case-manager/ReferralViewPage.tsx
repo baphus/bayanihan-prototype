@@ -47,19 +47,6 @@ function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
     },
   ]
 
-  if (referral.status === 'PENDING') {
-    timeline.push({
-      id: `${referral.id}-pending`,
-      actorType: 'Agency',
-      agencyId: referral.agencyId,
-      logoType: 'agency',
-      title: 'Awaiting Agency Intake',
-      description: 'Referral is pending agency intake acknowledgment.',
-      timestamp: withOffsetMinutes(referral.createdAt, 20),
-      actor: agencyActor,
-    })
-  }
-
   if (referral.status === 'PROCESSING') {
     timeline.push({
       id: `${referral.id}-accepted`,

@@ -1,5 +1,3 @@
-import { AppAnchorButton, AppButton } from './ui/AppButton'
-
 const heroImage = 'https://staging.pssc.org.ph/wp-content/uploads/2024/11/ofw-and-migration-pssc-policy-brief-1024x791.jpg'
 
 type HeroSectionProps = {
@@ -10,36 +8,45 @@ type HeroSectionProps = {
 
 export default function HeroSection({ title, description, onTrackAction }: HeroSectionProps) {
   return (
-    <section className="relative overflow-hidden bg-surface px-8 pb-24 pt-16 md:pb-32 md:pt-24">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 md:grid-cols-12">
-        <div className="z-10 md:col-span-7">
-          <h1 className="mb-6 font-headline text-4xl font-extrabold leading-tight tracking-tight text-[#005288] md:text-6xl">
+    <section className="relative flex min-h-[600px] w-full items-center justify-center overflow-hidden py-24 md:min-h-[85vh] md:py-32">
+      {/* Background Image & Overlay */}
+      <div className="absolute inset-0 z-0">
+        <img
+          src={heroImage}
+          alt="Bayanihan One Window System in action"
+          className="h-full w-full object-cover object-center"
+        />
+        {/* Modern dark gradient overlay to ensure text legibility */}
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/80 via-slate-900/60 to-[#003a63]/90"></div>
+      </div>
+
+      {/* Hero Content */}
+      <div className="relative z-10 mx-auto w-full max-w-7xl px-4 md:px-8">
+        <div className="mx-auto max-w-4xl text-center">
+          <h1 className="mb-6 font-headline text-4xl font-extrabold leading-tight tracking-tight text-white drop-shadow-xl sm:text-5xl md:text-6xl lg:text-7xl">
             {title}
           </h1>
-          <p className="mb-10 max-w-2xl text-lg leading-relaxed text-[#41474f] md:text-xl">{description}</p>
+          <p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-slate-200 drop-shadow-md md:text-xl">
+            {description}
+          </p>
 
-          <div className="flex flex-wrap gap-4">
-            <AppButton type="button" onClick={onTrackAction} size="lg" icon="travel_explore" className="shadow-sm">
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            {/* Primary Action */}
+            <button 
+              type="button" 
+              onClick={onTrackAction}
+              className="inline-flex items-center justify-center gap-2 bg-white px-8 py-4 text-base font-bold text-[#005288] shadow-xl transition-all hover:-translate-y-0.5 hover:bg-slate-100 active:scale-95"
+            >
+              <span className="material-symbols-outlined">travel_explore</span>
               Track Your Case
-            </AppButton>
-            <AppAnchorButton href="#tracker" variant="outline" size="lg">
+            </button>
+            {/* Secondary Action */}
+            <a 
+              href="#features"
+              className="inline-flex items-center justify-center gap-2 border border-white/40 bg-white/10 px-8 py-4 text-base font-bold text-white backdrop-blur-md transition-all hover:-translate-y-0.5 hover:bg-white/20 active:scale-95"
+            >
               Learn More
-            </AppAnchorButton>
-          </div>
-        </div>
-
-        <div className="relative md:col-span-5">
-          <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-secondary/10 blur-3xl"></div>
-          <div className="relative border-l-4 border-primary bg-surface-container-lowest p-4 shadow-lg">
-            <img
-              src={heroImage}
-              alt="Professional Government Worker"
-              className="h-[400px] w-full object-cover"
-            />
-            <div className="absolute -left-8 bottom-8 max-w-[240px] border-l-4 border-secondary bg-white p-6 shadow-xl">
-              <p className="editorial-label mb-1 text-[10px] font-bold uppercase tracking-widest text-[#006b5e]">Status Update</p>
-              <p className="text-sm font-bold text-on-surface">Case #PH-2026-8812 processed successfully.</p>
-            </div>
+            </a>
           </div>
         </div>
       </div>

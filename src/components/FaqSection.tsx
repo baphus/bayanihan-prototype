@@ -9,7 +9,7 @@ const FAQ_CATEGORIES = [
   'Privacy and Support',
 ] as const
 
-export default function FaqSection() {
+export default function FaqSection({ categories = FAQ_CATEGORIES }: { categories?: readonly string[] }) {
   const [openItemId, setOpenItemId] = useState<string | null>(FAQ_ITEMS[0]?.id ?? null)
 
   const handleToggle = (itemId: string) => {
@@ -27,7 +27,7 @@ export default function FaqSection() {
         </div>
 
         <div className="space-y-8">
-          {FAQ_CATEGORIES.map((category) => {
+          {categories.map((category) => {
             const itemsInCategory = FAQ_ITEMS.filter((item) => item.category === category)
 
             if (!itemsInCategory.length) {

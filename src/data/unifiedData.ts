@@ -199,6 +199,14 @@ const REFERRAL_CASES_RAW: SharedReferralCase[] = [
   { id: 'MB-2024-4423', caseNo: 'OW-S4L9C1Y', clientName: 'Hernandez, Liza M.', clientType: 'Next of Kin', service: 'Medical Assistance', milestone: 'Hospital Coordination', status: 'PROCESSING', createdAt: '2026-03-30T10:09:57', updatedAt: '2026-03-31T11:40:19' },
   { id: 'MB-2024-4424', caseNo: 'OW-D7T3R8M', clientName: 'Aquino, Joel T.', clientType: 'Overseas Filipino Worker', service: 'Repatriation Services', milestone: 'Travel Clearance', status: 'COMPLETED', createdAt: '2026-03-31T07:58:33', updatedAt: '2026-04-01T14:17:42' },
   { id: 'MB-2024-4425', caseNo: 'OW-P2X6G5N', clientName: 'De Leon, Patricia S.', clientType: 'Overseas Filipino Worker', service: 'Financial Relief', milestone: 'Assessment', status: 'PENDING', createdAt: '2026-04-01T09:26:05', updatedAt: '2026-04-01T13:11:58' },
+  { id: 'MB-OWWA-2026-1001', caseNo: 'OW-A1N7K9P', clientName: 'Alvarez, Danilo R.', clientType: 'Overseas Filipino Worker', service: 'Scholarship Programs', milestone: 'Case Intake', status: 'PROCESSING', createdAt: '2026-04-02T08:14:00', updatedAt: '2026-04-06T13:25:00' },
+  { id: 'MB-OWWA-2026-1002', caseNo: 'OW-B3Q5D7R', clientName: 'Benitez, Arlene S.', clientType: 'Next of Kin', service: 'Calamity Assistance', milestone: 'Verification', status: 'PENDING', createdAt: '2026-04-03T09:42:00', updatedAt: '2026-04-04T11:18:00' },
+  { id: 'MB-OWWA-2026-1003', caseNo: 'OW-C9T2M4L', clientName: 'Cabrera, Joel T.', clientType: 'Overseas Filipino Worker', service: 'Welfare Assistance Program', milestone: 'Document Review', status: 'COMPLETED', createdAt: '2026-04-01T10:05:00', updatedAt: '2026-04-09T16:30:00' },
+  { id: 'MB-OWWA-2026-1004', caseNo: 'OW-D6V8H1N', clientName: 'Domingo, Kristine P.', clientType: 'Overseas Filipino Worker', service: 'Scholarship Programs', milestone: 'Agency Coordination', status: 'PROCESSING', createdAt: '2026-04-05T08:55:00', updatedAt: '2026-04-10T12:47:00' },
+  { id: 'MB-OWWA-2026-1005', caseNo: 'OW-E4P9S3X', clientName: 'Escobar, Maria L.', clientType: 'Next of Kin', service: 'Calamity Assistance', milestone: 'Case Intake', status: 'PENDING', createdAt: '2026-04-07T14:18:00', updatedAt: '2026-04-08T09:39:00' },
+  { id: 'MB-OWWA-2026-1006', caseNo: 'OW-F7K1W5Y', clientName: 'Ferrer, Noel A.', clientType: 'Overseas Filipino Worker', service: 'Welfare Assistance Program', milestone: 'Validation', status: 'COMPLETED', createdAt: '2026-04-06T11:23:00', updatedAt: '2026-04-12T15:05:00' },
+  { id: 'MB-OWWA-2026-1007', caseNo: 'OW-G2R6C8U', clientName: 'Guerrero, Sheila M.', clientType: 'Overseas Filipino Worker', service: 'Scholarship Programs', milestone: 'Eligibility Check', status: 'PROCESSING', createdAt: '2026-04-08T07:40:00', updatedAt: '2026-04-13T10:32:00' },
+  { id: 'MB-OWWA-2026-1008', caseNo: 'OW-H5L3Z9B', clientName: 'Hernando, Patrick J.', clientType: 'Next of Kin', service: 'Calamity Assistance', milestone: 'Document Intake', status: 'PENDING', createdAt: '2026-04-09T09:12:00', updatedAt: '2026-04-10T14:20:00' },
 ]
 
 export const REFERRAL_CASES: SharedReferralCase[] = REFERRAL_CASES_RAW.map((item) => ({
@@ -281,41 +289,17 @@ type AddressUnit = {
 }
 
 const MOCK_REGIONS: AddressUnit[] = [
-  { code: '1300000000', name: 'NCR' },
-  { code: '0400000000', name: 'Region IV-A (CALABARZON)' },
   { code: '0700000000', name: 'Region VII (Central Visayas)' },
-  { code: '1100000000', name: 'Region XI (Davao Region)' },
 ]
 
 const MOCK_PROVINCES_BY_REGION: Record<string, AddressUnit[]> = {
-  '1300000000': [],
-  '0400000000': [
-    { code: '0401000000', name: 'Batangas' },
-    { code: '0421000000', name: 'Cavite' },
-  ],
   '0700000000': [
     { code: '0722000000', name: 'Cebu' },
     { code: '0712000000', name: 'Bohol' },
   ],
-  '1100000000': [
-    { code: '1124000000', name: 'Davao del Sur' },
-    { code: '1123000000', name: 'Davao del Norte' },
-  ],
 }
 
 const MOCK_MUNICIPALITIES_BY_PARENT: Record<string, AddressUnit[]> = {
-  '1300000000': [
-    { code: '1339000000', name: 'Quezon City' },
-    { code: '1375000000', name: 'City of San Juan' },
-  ],
-  '0401000000': [
-    { code: '0410050000', name: 'Lipa City' },
-    { code: '0410280000', name: 'Tanauan City' },
-  ],
-  '0421000000': [
-    { code: '0421030000', name: 'Bacoor City' },
-    { code: '0421080000', name: 'Tagaytay City' },
-  ],
   '0722000000': [
     { code: '0722170000', name: 'Cebu City' },
     { code: '0722300000', name: 'Mandaue City' },
@@ -324,41 +308,9 @@ const MOCK_MUNICIPALITIES_BY_PARENT: Record<string, AddressUnit[]> = {
     { code: '0712170000', name: 'Tagbilaran City' },
     { code: '0712330000', name: 'Panglao' },
   ],
-  '1124000000': [
-    { code: '1124020000', name: 'Davao City' },
-    { code: '1124030000', name: 'Digos City' },
-  ],
-  '1123000000': [
-    { code: '1123030000', name: 'Panabo City' },
-    { code: '1123110000', name: 'Tagum City' },
-  ],
 }
 
 const MOCK_BARANGAYS_BY_MUNICIPALITY: Record<string, AddressUnit[]> = {
-  '1339000000': [
-    { code: '133900011', name: 'Bagong Pag-asa' },
-    { code: '133900017', name: 'Batasan Hills' },
-  ],
-  '1375000000': [
-    { code: '137500004', name: 'Greenhills' },
-    { code: '137500010', name: 'Salapan' },
-  ],
-  '0410050000': [
-    { code: '041005009', name: 'Balintawak' },
-    { code: '041005018', name: 'Marawoy' },
-  ],
-  '0410280000': [
-    { code: '041028004', name: 'Banadero' },
-    { code: '041028023', name: 'Santor' },
-  ],
-  '0421030000': [
-    { code: '042103002', name: 'Alima' },
-    { code: '042103060', name: 'Mambog I' },
-  ],
-  '0421080000': [
-    { code: '042108013', name: 'Kaybagal North' },
-    { code: '042108014', name: 'Kaybagal South' },
-  ],
   '0722170000': [
     { code: '072217006', name: 'Capitol Site' },
     { code: '072217062', name: 'Lahug' },
@@ -374,22 +326,6 @@ const MOCK_BARANGAYS_BY_MUNICIPALITY: Record<string, AddressUnit[]> = {
   '0712330000': [
     { code: '071233006', name: 'Doljo' },
     { code: '071233010', name: 'Poblacion' },
-  ],
-  '1124020000': [
-    { code: '112402049', name: 'Matina' },
-    { code: '112402027', name: 'Buhangin' },
-  ],
-  '1124030000': [
-    { code: '112403002', name: 'Aplaya' },
-    { code: '112403010', name: 'Poblacion' },
-  ],
-  '1123030000': [
-    { code: '112303007', name: 'Gredu' },
-    { code: '112303019', name: 'New Pandan' },
-  ],
-  '1123110000': [
-    { code: '112311006', name: 'Apokon' },
-    { code: '112311022', name: 'Mankilam' },
   ],
 }
 
@@ -680,6 +616,7 @@ export type CaseManagerCase = SharedReferralCase & {
     contact: string
     email: string
     address: AddressParts
+    specialCategories?: string[]
   }
   workHistory?: {
     lastCountry: string
@@ -721,6 +658,13 @@ const CASE_MANAGER_AGENCIES: CaseManagerAgency[] = AGENCIES_DATA.map((agency) =>
 }))
 
 export function getCaseAgency(caseId: string): CaseManagerAgency {
+  if (caseId.startsWith('MB-OWWA-')) {
+    const owwa = CASE_MANAGER_AGENCIES.find((agency) => agency.id === 'owwa')
+    if (owwa) {
+      return owwa
+    }
+  }
+
   return CASE_MANAGER_AGENCIES[computeStableIndex(caseId, CASE_MANAGER_AGENCIES.length)]
 }
 
@@ -1667,6 +1611,95 @@ export function getSystemAdminNotificationDeliveryLogs(): NotificationDeliveryLo
   return cloneData(SYSTEM_ADMIN_NOTIFICATION_LOGS)
 }
 
+const CASE_MANAGER_DASHBOARD_TRIGGERS: NotificationTriggerKey[] = [
+  'REFERRAL_ACCEPTED',
+  'REFERRAL_REJECTED',
+]
+
+const AGENCY_DASHBOARD_TRIGGERS: NotificationTriggerKey[] = [
+  'REFERRAL_ACCEPTED',
+]
+
+function toAgencyDashboardMessage(log: NotificationDeliveryLog): string {
+  const matchedCase = CASE_MANAGER_CASES.find((item) => `notif-${item.id}` === log.id)
+  const caseLabel = matchedCase ? `${matchedCase.caseNo} (${matchedCase.clientName})` : 'Unknown case'
+
+  if (log.trigger === 'REFERRAL_ACCEPTED') {
+    return `New referral: ${caseLabel} was referred to your agency.`
+  }
+
+  if (log.trigger === 'REFERRAL_REJECTED') {
+    return `New referral: ${caseLabel} was referred to your agency.`
+  }
+
+  if (log.trigger === 'REFERRAL_COMPLETED') {
+    return `New referral: ${caseLabel} was referred to your agency.`
+  }
+
+  if (log.trigger === 'MILESTONE_UPDATED') {
+    return `New referral: ${caseLabel} was referred to your agency.`
+  }
+
+  return `New referral: ${caseLabel} was referred to your agency.`
+}
+
+function toCaseManagerDashboardMessage(log: NotificationDeliveryLog): string {
+  const matchedCase = CASE_MANAGER_CASES.find((item) => `notif-${item.id}` === log.id)
+  const caseLabel = matchedCase ? `${matchedCase.caseNo} (${matchedCase.clientName})` : 'Unknown case'
+  const agencyName = matchedCase?.agencyName ?? 'Agency'
+
+  if (log.trigger === 'REFERRAL_ACCEPTED') {
+    return `Referral accepted by ${agencyName} for ${caseLabel}. Remarks: Agency accepted the referral and started processing.`
+  }
+
+  if (log.trigger === 'REFERRAL_REJECTED') {
+    return `Referral rejected by ${agencyName} for ${caseLabel}. Remarks: Agency returned the referral for follow-up and correction.`
+  }
+
+  return `Referral update from ${agencyName} for ${caseLabel}. Remarks: Please review the latest agency action.`
+}
+
+export function getDashboardNotificationDeliveryLogsByRole(
+  role: MockUserRole,
+  limit = 6,
+): NotificationDeliveryLog[] {
+  const sortedLogs = cloneData(SYSTEM_ADMIN_NOTIFICATION_LOGS).sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  )
+
+  const filteredLogs = sortedLogs.filter((item) => {
+    if (role === 'System Admin') {
+      return true
+    }
+
+    if (role === 'Case Manager') {
+      return CASE_MANAGER_DASHBOARD_TRIGGERS.includes(item.trigger)
+    }
+
+    return AGENCY_DASHBOARD_TRIGGERS.includes(item.trigger)
+  })
+
+  if (role === 'Case Manager') {
+    return filteredLogs
+      .map((item) => ({
+        ...item,
+        message: toCaseManagerDashboardMessage(item),
+      }))
+      .slice(0, Math.max(0, limit))
+  }
+
+  if (role === 'Agency') {
+    return filteredLogs
+      .map((item) => ({
+        ...item,
+        message: toAgencyDashboardMessage(item),
+      }))
+      .slice(0, Math.max(0, limit))
+  }
+
+  return filteredLogs.slice(0, Math.max(0, limit))
+}
+
 export function addSystemAdminNotificationDeliveryLog(log: Omit<NotificationDeliveryLog, 'id'>): void {
   SYSTEM_ADMIN_NOTIFICATION_LOGS = [
     {
@@ -1792,6 +1825,7 @@ export type CaseOverviewData = {
     emailAddress: string
     homeAddress: string
     homeAddressParts: AddressParts
+    specialCategories: string[]
   }
   workHistory: {
     lastCountry: string
@@ -2167,6 +2201,7 @@ function buildCaseOverview(trackedCase: SharedReferralCase): CaseOverviewData {
       emailAddress: nextOfKin.email,
       homeAddress: formatAddressParts(nextOfKin.address),
       homeAddressParts: nextOfKin.address,
+      specialCategories,
     },
     workHistory: {
       lastCountry: persona.lastCountry,
@@ -2200,17 +2235,6 @@ function buildCaseTimeline(trackedCase: SharedReferralCase): CaseTimelineItem[] 
       detail: `Case was endorsed to ${referral.agencyName} for ${referral.service}.`,
       icon: 'send',
     })
-
-    if (referral.status === 'PENDING') {
-      events.push({
-        at: addHours(referral.createdAt, 1),
-        agency: agencyShort,
-        agencyId: referral.agencyId,
-        title: `${agencyShort}: Awaiting Agency Intake`,
-        detail: 'Referral is pending agency intake acknowledgment.',
-        icon: 'hourglass_empty',
-      })
-    }
 
     if (referral.status === 'PROCESSING' || referral.status === 'COMPLETED') {
       events.push({
@@ -2306,15 +2330,6 @@ function buildAgencyMilestones(referral: CaseManagerReferral | undefined, agency
       state: 'complete',
     },
   ]
-
-  if (referral.status === 'PENDING') {
-    events.push({
-      at: addHours(referral.createdAt, 4),
-      title: 'AWAITING AGENCY INTAKE',
-      detail: 'Referral is pending agency intake acknowledgment.',
-      state: 'pending',
-    })
-  }
 
   if (referral.status === 'PROCESSING' || referral.status === 'COMPLETED') {
     events.push({

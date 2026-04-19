@@ -1,12 +1,13 @@
 import { ClipboardList, ClipboardType, RefreshCcw, CheckCircle2 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useMemo } from 'react'
 import { type Column } from '../../components/ui/UnifiedTable'
 import { RecentTable } from '../../components/ui/RecentTable'
+import NotificationBell from '../../components/ui/NotificationBell'
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass, type AgencyStatus } from './statusBadgeStyles'
 import { useNavigate } from 'react-router-dom'
-import { REFERRAL_CASES } from '../../data/unifiedData'
-import { getCaseManagerAgencies } from '../../data/unifiedData'
+import { REFERRAL_CASES, getDashboardNotificationDeliveryLogsByRole, getCaseManagerAgencies } from '../../data/unifiedData'
 
 type ReferralRowData = {
   rowId: string
@@ -23,6 +24,7 @@ type ReferralRowData = {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const owwaLogo = getCaseManagerAgencies().find((agency) => agency.id === 'owwa')?.logoUrl ?? '/logo.png'
+  const dashboardNotifications = useMemo(() => getDashboardNotificationDeliveryLogsByRole('Agency'), [])
 
   const recentReferrals: ReferralRowData[] = REFERRAL_CASES.slice(0, 8).map((item) => ({
     rowId: item.id,
@@ -108,6 +110,9 @@ export default function DashboardPage() {
            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-calendar"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
             Overseas Workers Welfare Administration Region VII • April 09, 2026
           </p>
+        </div>
+        <div className="self-start md:self-auto">
+          <NotificationBell notifications={dashboardNotifications} triggerLabelOverride="NEW REFERRAL" />
         </div>
       </header>
 

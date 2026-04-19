@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Users, FolderCheck, Plus, Send, Eye, MoreHorizontal, ChevronRight, BarChart3 } from 'lucide-react'
+import { ArrowRightLeft, Users, FolderCheck, Plus, Send, Eye, MoreHorizontal, ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -6,18 +6,24 @@ import { type Column } from '../../components/ui/UnifiedTable'
 import { RecentTable } from '../../components/ui/RecentTable'
 import {
   CASE_MANAGER_CASES,
-  getCaseManagerReferrals,
   formatDisplayDate,
   getAgencyReferralBreakdown,
   getCaseManagerAgencies,
+  getDashboardNotificationDeliveryLogsByRole,
+  getExistingClientProfile,
   getStatusBreakdown,
   toCaseHealthStatus,
 } from '../../data/unifiedData'
+import { getManagedCases, getManagedLatestMilestone, getManagedReferrals } from '../../data/caseLifecycleStore'
+
+import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
+import NotificationBell from '../../components/ui/NotificationBell'
 
 type CaseRowData = {
   rowId: string
   caseNo: string
-  status: string
+  caseStatus: string
+  referralStatus: string
   update: string
   agency: string
   agencyCode: string
@@ -27,11 +33,25 @@ type CaseRowData = {
 export default function DashboardPage() {
   const navigate = useNavigate()
 
-  const referrals = useMemo(() => getCaseManagerReferrals(), [])
+  const managedCases = useMemo(() => getManagedCases(), [])
+  const referrals = useMemo(() => getManagedReferrals(), [])
+
+  const latestReferralByCaseId = useMemo(() => {
+    const acc: Record<string, (typeof referrals)[number]> = {}
+
+    referrals.forEach((referral) => {
+      const existing = acc[referral.caseId]
+      if (!existing || new Date(referral.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+        acc[referral.caseId] = referral
+      }
+    })
+
+    return acc
+  }, [referrals])
 
   const sortedCases = useMemo(
-    () => [...CASE_MANAGER_CASES].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
-    [],
+    () => [...managedCases].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [managedCases],
   )
 
   const agenciesById = useMemo(
@@ -43,15 +63,32 @@ export default function DashboardPage() {
     [],
   )
 
-  const recentCases: CaseRowData[] = sortedCases.slice(0, 5).map((item) => ({
-    rowId: item.id,
-    caseNo: item.caseNo,
-    status: toCaseHealthStatus(item.status),
-    update: `"${item.milestone}"`,
-    agency: item.agencyName,
-    agencyCode: item.agencyShort,
-    agencyLogoUrl: agenciesById[item.agencyId]?.logoUrl ?? '/logo.png',
-  }))
+  const recentCases: CaseRowData[] = sortedCases.slice(0, 5).map((item) => {
+    const latestReferral = latestReferralByCaseId[item.id]
+    const latestMilestone = latestReferral ? getManagedLatestMilestone(latestReferral.id, '') : ''
+    const latestUpdateText = latestMilestone
+      ? `"${latestMilestone}"`
+      : latestReferral
+        ? latestReferral.status === 'PENDING'
+          ? '"Awaiting agency acceptance"'
+          : latestReferral.status === 'PROCESSING'
+            ? '"Referral is being processed"'
+            : latestReferral.status === 'COMPLETED'
+              ? '"Referral completed by agency"'
+              : '"Referral returned by agency"'
+        : `"${item.milestone}"`
+
+    return {
+      rowId: item.id,
+      caseNo: item.caseNo,
+      caseStatus: toCaseHealthStatus(item.status),
+      referralStatus: latestReferral?.status ?? item.status,
+      update: latestUpdateText,
+      agency: latestReferral?.agencyName ?? item.agencyName,
+      agencyCode: item.agencyShort,
+      agencyLogoUrl: agenciesById[(latestReferral?.agencyId ?? item.agencyId)]?.logoUrl ?? '/logo.png',
+    }
+  })
 
   const uniqueClientCount = useMemo(() => new Set(referrals.map((item) => item.clientName)).size, [referrals])
   const pendingCount = useMemo(() => referrals.filter((item) => item.status === 'PENDING').length, [referrals])
@@ -59,12 +96,98 @@ export default function DashboardPage() {
 
   const statusBreakdown = useMemo(() => getStatusBreakdown(CASE_MANAGER_CASES), [])
   const openCount = statusBreakdown.PENDING + statusBreakdown.PROCESSING
+  const closedCount = statusBreakdown.COMPLETED + statusBreakdown.REJECTED
   const totalCases = referrals.length
-  const openPercent = totalCases > 0 ? Math.round((openCount / totalCases) * 100) : 0
-  const closedPercent = 100 - openPercent
+  const completedReferralsCount = statusBreakdown.COMPLETED
+  const averageReferralCompletionRate = totalCases > 0 ? Math.round((completedReferralsCount / totalCases) * 100) : 0
+  const averageCaseDaysToClose = useMemo(() => {
+    const closedCases = managedCases.filter((item) => toCaseHealthStatus(item.status) === 'CLOSED')
+    if (closedCases.length === 0) {
+      return 0
+    }
 
-  const topAgencies = useMemo(() => getAgencyReferralBreakdown(CASE_MANAGER_CASES).slice(0, 4), [])
-  const topAgencyMax = topAgencies[0]?.count ?? 1
+    const totalDays = closedCases.reduce((sum, item) => {
+      const created = new Date(item.createdAt).getTime()
+      const closed = new Date(item.updatedAt).getTime()
+      const days = Math.max(1, Math.round((closed - created) / (1000 * 60 * 60 * 24)))
+      return sum + days
+    }, 0)
+
+    return Math.round((totalDays / closedCases.length) * 10) / 10
+  }, [managedCases])
+
+  const referralStatusStats = useMemo(() => {
+    const total = referrals.length || 1;
+    let pending = 0, processing = 0, completed = 0, rejected = 0;
+    referrals.forEach(r => {
+      if (r.status === 'PENDING') pending++;
+      if (r.status === 'PROCESSING') processing++;
+      if (r.status === 'COMPLETED') completed++;
+      if (r.status === 'REJECTED') rejected++;
+    });
+    
+    return [
+      { label: 'Pending', count: pending, color: 'bg-amber-500', hex: '#f59e0b' },
+      { label: 'Processing', count: processing, color: 'bg-blue-500', hex: '#3b82f6' },
+      { label: 'Completed', count: completed, color: 'bg-emerald-500', hex: '#10b981' },
+      { label: 'Rejected', count: rejected, color: 'bg-rose-500', hex: '#f43f5e' },
+    ].filter(item => item.count > 0).map(s => ({ ...s, percent: Math.round((s.count / total) * 100) }));
+  }, [referrals]);
+
+  const casesStatusStats = useMemo(() => {
+    const total = CASE_MANAGER_CASES.length || 1;
+    const open = statusBreakdown.PENDING + statusBreakdown.PROCESSING;
+    const closed = statusBreakdown.COMPLETED + statusBreakdown.REJECTED;
+
+    return [
+      { label: 'Open', count: open, color: 'bg-blue-900', hex: '#1e3a8a' },
+      { label: 'Closed', count: closed, color: 'bg-slate-300', hex: '#cbd5e1' },
+    ].filter(item => item.count > 0).map(s => ({ ...s, percent: Math.round((s.count / total) * 100) }));
+  }, [statusBreakdown]);
+
+  const casesByProvinceStats = useMemo(() => {
+    const provinceCounts: Record<string, number> = {};
+    const total = CASE_MANAGER_CASES.length || 1;
+
+    CASE_MANAGER_CASES.forEach((item) => {
+      const province = item.ofwProfile?.address?.provinceName || getExistingClientProfile(item.clientName).address.provinceName || 'Unknown';
+      provinceCounts[province] = (provinceCounts[province] || 0) + 1;
+    });
+
+    const colors = ['#0f766e', '#ea580c', '#1e3a8a', '#6d28d9', '#be123c', '#4338ca'];
+    const bgColors = ['bg-teal-700', 'bg-orange-600', 'bg-blue-900', 'bg-violet-700', 'bg-rose-700', 'bg-indigo-700'];
+
+    return Object.entries(provinceCounts)
+      .map(([province, count], index) => {
+        const colorIndex = index % colors.length;
+        return {
+          label: province,
+          count,
+          hex: colors[colorIndex],
+          color: bgColors[colorIndex],
+          percent: Math.round((count / total) * 100),
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+  }, []);
+
+  const agencyStats = useMemo(() => {
+    const all = getAgencyReferralBreakdown(CASE_MANAGER_CASES);
+    const total = all.reduce((sum, a) => sum + a.count, 0) || 1;
+    const colors = ['#1e3a8a', '#0f766e', '#ea580c', '#6d28d9', '#be123c', '#4338ca'];
+    const bgColors = ['bg-blue-900', 'bg-teal-700', 'bg-orange-600', 'bg-violet-700', 'bg-rose-700', 'bg-indigo-700'];
+    
+    return all.map((item, i) => {
+      const colorIndex = i % colors.length;
+      return {
+        label: item.agencyName,
+        count: item.count,
+        hex: colors[colorIndex],
+        color: bgColors[colorIndex],
+        percent: Math.round((item.count / total) * 100)
+      };
+    });
+  }, []);
 
   const todayLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
@@ -72,6 +195,8 @@ export default function DashboardPage() {
     day: '2-digit',
     year: 'numeric',
   }).format(new Date())
+
+  const dashboardNotifications = useMemo(() => getDashboardNotificationDeliveryLogsByRole('Case Manager'), [])
 
   const clientTypeStats = useMemo(() => {
     const ofw = CASE_MANAGER_CASES.filter((item) => item.clientType === 'Overseas Filipino Worker').length
@@ -102,10 +227,10 @@ export default function DashboardPage() {
     [referrals, agenciesById],
   )
 
-  const monthlyReferralVolume = useMemo(() => {
+  const casesOverTime = useMemo(() => {
     const bucket = new Map<string, { key: string; label: string; count: number }>()
 
-    referrals.forEach((item) => {
+    managedCases.forEach((item) => {
       const date = new Date(item.createdAt)
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
       const label = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
@@ -121,42 +246,9 @@ export default function DashboardPage() {
     return Array.from(bucket.values())
       .sort((a, b) => a.key.localeCompare(b.key))
       .slice(-6)
-  }, [referrals])
+  }, [managedCases])
 
-  const monthlyVolumeMax = monthlyReferralVolume.reduce((acc, item) => Math.max(acc, item.count), 1)
-
-  const monthlyCompletionRate = useMemo(() => {
-    const bucket = new Map<string, { key: string; label: string; total: number; completed: number }>()
-
-    referrals.forEach((item) => {
-      const date = new Date(item.updatedAt)
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      const label = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
-      const existing = bucket.get(key)
-
-      if (existing) {
-        existing.total += 1
-        if (item.status === 'COMPLETED') {
-          existing.completed += 1
-        }
-      } else {
-        bucket.set(key, {
-          key,
-          label,
-          total: 1,
-          completed: item.status === 'COMPLETED' ? 1 : 0,
-        })
-      }
-    })
-
-    return Array.from(bucket.values())
-      .sort((a, b) => a.key.localeCompare(b.key))
-      .slice(-6)
-      .map((item) => ({
-        label: item.label,
-        rate: item.total > 0 ? Math.round((item.completed / item.total) * 100) : 0,
-      }))
-  }, [referrals])
+  const casesOverTimeMax = casesOverTime.reduce((acc, item) => Math.max(acc, item.count), 1)
 
   const recentCasesColumns: Column<CaseRowData>[] = [
     {
@@ -165,13 +257,24 @@ export default function DashboardPage() {
       render: (row) => <span className="text-xs text-slate-900 font-body">{row.caseNo}</span>
     },
     {
-      key: 'status',
-      title: 'STATUS',
+      key: 'caseStatus',
+      title: 'CASE STATUS',
       render: (row) => {
-        const isOpen = row.status === 'OPEN'
+        const isOpen = row.caseStatus === 'OPEN'
         return (
           <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded ${isOpen ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-600'}`}>
-            {row.status}
+            {row.caseStatus}
+          </span>
+        )
+      }
+    },
+    {
+      key: 'referralStatus',
+      title: 'REF. STATUS',
+      render: (row) => {
+        return (
+          <span className={`inline-flex rounded-[2px] border px-2 py-1 text-[9px] font-bold uppercase tracking-widest ${getStatusBadgeClass(row.referralStatus as any)}`}>
+            {row.referralStatus}
           </span>
         )
       }
@@ -180,11 +283,10 @@ export default function DashboardPage() {
       key: 'agency',
       title: 'REFERRED AGENCY',
       render: (row) => (
-        <span className="flex items-center gap-1.5 text-xs text-slate-700 font-body">
-          <div className="h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm">
+        <span className="flex items-center justify-center" title={row.agency}>
+          <div className="h-6 w-6 overflow-hidden rounded-full border border-white bg-white shadow-sm">
             <img src={row.agencyLogoUrl} alt={row.agencyCode} className="h-full w-full object-contain p-[1px]" />
           </div>
-          {row.agency}
         </span>
       )
     },
@@ -226,10 +328,13 @@ export default function DashboardPage() {
             Today is {todayLabel}
           </p>
         </div>
+        <div className="self-start md:self-auto">
+          <NotificationBell notifications={dashboardNotifications} />
+        </div>
       </header>
 
       {/* TOP SUMMARY CARDS */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
         <StatCard
           title="TOTAL CASES"
           value={String(totalCases)}
@@ -257,6 +362,20 @@ export default function DashboardPage() {
           desc="Milestones completed"
           icon={<FolderCheck className="w-5 h-5 text-blue-800 opacity-50" />}
         />
+        <StatCard
+          title="AVG REFERRAL COMPLETION RATE"
+          value={`${averageReferralCompletionRate}%`}
+          trend={`${completedReferralsCount} completed referrals`}
+          desc="Completed out of total referrals"
+          icon={<FolderCheck className="w-5 h-5 text-blue-800 opacity-50" />}
+        />
+        <StatCard
+          title="AVG DAYS TO CASE CLOSURE"
+          value={averageCaseDaysToClose.toFixed(1)}
+          trend={`${closedCount} closed cases`}
+          desc="Average days from case creation to closure"
+          icon={<FolderCheck className="w-5 h-5 text-blue-800 opacity-50" />}
+        />
       </section>
 
       <div className="grid grid-cols-12 gap-4">
@@ -271,76 +390,98 @@ export default function DashboardPage() {
             onViewAll={() => console.log('View all cases')}
           />
 
-          {/* ANALYTICS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* CASES SECTION */}
+          <h2 className="text-[13px] font-bold font-headline text-slate-500 mb-3 uppercase tracking-wider">Cases Breakdown</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-4">Referrals by Status</h3>
+              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-4">Cases by Status</h3>
               <div className="relative flex justify-center items-center py-2">
-                <div className="w-24 h-24 rounded-full bg-slate-200 relative overflow-hidden" style={{ background: `conic-gradient(#1e3a8a 0% ${openPercent}%, #e2e8f0 ${openPercent}% 100%)` }}></div>
-                <div className="ml-4 space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-900"></span>
-                    <span className="text-[11px] font-medium text-slate-800 font-label">{openPercent}% Open</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-slate-200"></span>
-                    <span className="text-[11px] font-medium text-slate-500 font-label">{closedPercent}% Closed</span>
-                  </div>
+                <PieChart data={casesStatusStats} className="w-24 h-24" />
+                <div className="ml-6 space-y-1.5 flex-1">
+                  {casesStatusStats.map(stat => (
+                    <div key={stat.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${stat.color}`}></span>
+                        <span className="text-[11px] font-medium text-slate-800 font-label truncate" title={stat.label}>{stat.label}</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 ml-2">{stat.percent}%</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
+
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-4">Referrals by Agency</h3>
-              <div className="space-y-4">
-                {topAgencies.map((item, index) => (
-                  <BarItem
-                    key={item.agencyName}
-                    label={item.agencyName}
-                    color={index % 2 === 0 ? 'bg-blue-900' : 'bg-teal-700'}
-                    width={`${Math.max(10, Math.round((item.count / topAgencyMax) * 100))}%`}
-                    val={String(item.count)}
-                  />
-                ))}
+              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-4">Cases by Province</h3>
+              <div className="relative flex justify-center items-center py-2">
+                <PieChart data={casesByProvinceStats} className="w-24 h-24" />
+                <div className="ml-6 space-y-1.5 flex-1">
+                  {casesByProvinceStats.map(stat => (
+                    <div key={stat.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${stat.color}`}></span>
+                        <span className="text-[11px] font-medium text-slate-800 font-label truncate" title={stat.label}>{stat.label}</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 ml-2">{stat.percent}%</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+            <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-3">Cases Over Time</h3>
+            <div className="flex items-end gap-2 h-36">
+              {casesOverTime.map((item) => (
+                <div key={item.key} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1">
+                  <div className="text-[10px] font-bold text-slate-500">{item.count}</div>
+                  <div
+                    className="w-full rounded-t-md bg-blue-800/80"
+                    style={{ height: `${Math.max(12, Math.round((item.count / casesOverTimeMax) * 100))}%` }}
+                  />
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* REFERRALS SECTION */}
+          <h2 className="text-[13px] font-bold font-headline text-slate-500 mb-3 uppercase tracking-wider">Referrals Breakdown</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-3 flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" /> Referral Volume Trend
-              </h3>
-              <div className="flex items-end gap-2 h-36">
-                {monthlyReferralVolume.map((item) => (
-                  <div key={item.key} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1">
-                    <div className="text-[10px] font-bold text-slate-500">{item.count}</div>
-                    <div
-                      className="w-full rounded-t-md bg-blue-800/80"
-                      style={{ height: `${Math.max(12, Math.round((item.count / monthlyVolumeMax) * 100))}%` }}
-                    />
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{item.label}</div>
-                  </div>
-                ))}
+              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-4">Referrals by Status</h3>
+              <div className="relative flex justify-center items-center py-2">
+                <PieChart data={referralStatusStats} className="w-24 h-24" />
+                <div className="ml-6 space-y-1.5 flex-1">
+                  {referralStatusStats.map(stat => (
+                    <div key={stat.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${stat.color}`}></span>
+                        <span className="text-[11px] font-medium text-slate-800 font-label truncate" title={stat.label}>{stat.label}</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 ml-2">{stat.percent}%</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-3">Monthly Completion Rate</h3>
-              <div className="space-y-3">
-                {monthlyCompletionRate.map((item) => (
-                  <div key={item.label} className="space-y-1">
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                      <span>{item.label}</span>
-                      <span>{item.rate}%</span>
+              <h3 className="text-[15px] font-bold font-headline text-blue-900 mb-4">Referrals by Agency</h3>
+              <div className="relative flex justify-center items-center py-2">
+                <PieChart data={agencyStats} className="w-24 h-24" />
+                <div className="ml-6 space-y-1.5 flex-1 h-24 overflow-y-auto pr-1">
+                  {agencyStats.map((stat) => (
+                    <div key={stat.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${stat.color}`}></span>
+                        <span className="text-[11px] font-medium text-slate-800 font-label truncate max-w-[120px]" title={stat.label}>{stat.label}</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 ml-2">{stat.percent}%</span>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-emerald-600"
-                        style={{ width: `${item.rate}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -438,18 +579,40 @@ function StatCard({ title, value, trend, desc }: { title: string; value: string;
   )
 }
 
-function BarItem({ label, color, width, val }: { label: string; color: string; width: string; val: string }) {
+function PieChart({ data, className = "w-16 h-16" }: { data: { label: string; count: number; hex: string }[], className?: string }) {
+  const total = data.reduce((sum, item) => sum + item.count, 0) || 1;
+  let cumulativePercent = 0;
+  
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">
-        <span>{label}</span>
-        <span>{val}</span>
-      </div>
-      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full`} style={{ width }}></div>
-      </div>
-    </div>
-  )
+    <svg viewBox="0 0 63.6619772 63.6619772" className={`${className} -rotate-90 rounded-full shrink-0`}>
+      <circle cx="31.8309886" cy="31.8309886" r="31.8309886" fill="#f1f5f9" />
+      {data.map(item => {
+        const pct = (item.count / total) * 100;
+        const offset = 100 - cumulativePercent;
+        const strokeDasharray = `${pct} ${100 - pct}`;
+        cumulativePercent += pct;
+        
+        if (pct === 0) return null;
+        
+        return (
+          <circle
+            key={item.label}
+            r="15.915494309189533"
+            cx="31.8309886"
+            cy="31.8309886"
+            fill="transparent"
+            stroke={item.hex}
+            strokeWidth="31.8309886"
+            strokeDasharray={strokeDasharray}
+            strokeDashoffset={offset}
+            className="cursor-pointer hover:opacity-80 transition-opacity outline-none"
+          >
+            <title>{item.label}: {item.count}</title>
+          </circle>
+        );
+      })}
+    </svg>
+  );
 }
 
 function ActionBtn({ icon, label, onClick }: { icon: ReactNode; label: string; onClick?: () => void }) {

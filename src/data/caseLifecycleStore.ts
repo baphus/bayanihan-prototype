@@ -99,6 +99,8 @@ function toCaseProfile(caseRecord: CaseManagerCase): {
       emailAddress: caseRecord.nextOfKinProfile?.email || nextOfKin.email,
       homeAddress: formatAddressParts(caseRecord.nextOfKinProfile?.address || nextOfKin.address),
       homeAddressParts: cloneAddress(caseRecord.nextOfKinProfile?.address || nextOfKin.address),
+      specialCategories:
+        caseRecord.nextOfKinProfile?.specialCategories || caseRecord.ofwProfile?.specialCategories || specialCategories,
     },
     workHistory: {
       lastCountry: caseRecord.workHistory?.lastCountry || persona.lastCountry,
@@ -262,8 +264,14 @@ function formatDurationDays(startIso: string, endIso: string): string {
   return `${days} Day${days > 1 ? 's' : ''}`
 }
 
+function addMinutesIso(iso: string, minutes: number): string {
+  return new Date(new Date(iso).getTime() + minutes * 60000).toISOString()
+}
+
 function buildCaseTimelineForManagedCase(caseRecord: CaseManagerCase, referrals: CaseManagerReferral[]): CaseTimelineItem[] {
-  const entries: CaseTimelineItem[] = [
+  type SortableTimelineEntry = CaseTimelineItem & { sortAt: string }
+
+  const entries: SortableTimelineEntry[] = [
     {
       date: formatDisplayDateTime(caseRecord.createdAt),
       agency: 'Bayanihan',
@@ -271,6 +279,7 @@ function buildCaseTimelineForManagedCase(caseRecord: CaseManagerCase, referrals:
       detail: 'Case record was created in the Bayanihan portal.',
       icon: 'add_circle',
       logoUrl: '/logo.png',
+      sortAt: caseRecord.createdAt,
     },
   ]
 
@@ -283,10 +292,32 @@ function buildCaseTimelineForManagedCase(caseRecord: CaseManagerCase, referrals:
       detail: `Case was endorsed to ${referral.agencyName} for ${referral.service}.`,
       icon: 'send',
       logoUrl: getAgencyLogoUrl(referral.agencyId),
+      sortAt: referral.createdAt,
     })
 
-    // Then add any milestones if the referral has been accepted
+    if (referral.status === 'PENDING') {
+      return
+    }
+
     const milestoneEntries = getManagedReferralMilestones(referral.id)
+      .slice()
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
+    const acceptedIso = milestoneEntries[0]?.createdAt
+      ? addMinutesIso(milestoneEntries[0].createdAt, -1)
+      : addMinutesIso(referral.createdAt, 15)
+
+    entries.push({
+      date: formatDisplayDateTime(acceptedIso),
+      agency: referral.agencyName,
+      title: 'Referral Accepted',
+      detail: 'Agency accepted the referral and started processing.',
+      icon: 'check_circle',
+      logoUrl: getAgencyLogoUrl(referral.agencyId),
+      sortAt: acceptedIso,
+    })
+
+    // Real milestones should appear between Referral Accepted and terminal referral state.
     milestoneEntries.forEach((entry) => {
       entries.push({
         date: formatDisplayDateTime(entry.createdAt),
@@ -295,33 +326,80 @@ function buildCaseTimelineForManagedCase(caseRecord: CaseManagerCase, referrals:
         detail: entry.description,
         icon: entry.title.toLowerCase().includes('completed') ? 'check_circle' : entry.title.toLowerCase().includes('reject') ? 'cancel' : 'sync',
         logoUrl: getAgencyLogoUrl(referral.agencyId),
+        sortAt: entry.createdAt,
       })
     })
+
+    if (referral.status === 'COMPLETED') {
+      entries.push({
+        date: formatDisplayDateTime(referral.updatedAt),
+        agency: referral.agencyName,
+        title: 'Referral Completed',
+        detail: 'Agency marked this referral as completed.',
+        icon: 'check_circle',
+        logoUrl: getAgencyLogoUrl(referral.agencyId),
+        sortAt: referral.updatedAt,
+      })
+      return
+    }
+
+    if (referral.status === 'REJECTED') {
+      entries.push({
+        date: formatDisplayDateTime(referral.updatedAt),
+        agency: referral.agencyName,
+        title: 'Referral Rejected',
+        detail: 'Agency rejected the referral and returned it for follow-up.',
+        icon: 'cancel',
+        logoUrl: getAgencyLogoUrl(referral.agencyId),
+        sortAt: referral.updatedAt,
+      })
+    }
   })
 
-  return entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  if (toCaseHealthStatus(caseRecord.status) === 'CLOSED') {
+    const latestReferralUpdate = referrals.reduce((latest, referral) => {
+      return new Date(referral.updatedAt).getTime() > new Date(latest).getTime() ? referral.updatedAt : latest
+    }, caseRecord.createdAt)
+
+    const closedAt = new Date(caseRecord.updatedAt).getTime() >= new Date(latestReferralUpdate).getTime()
+      ? caseRecord.updatedAt
+      : addMinutesIso(latestReferralUpdate, 1)
+
+    entries.push({
+      date: formatDisplayDateTime(closedAt),
+      agency: 'Bayanihan',
+      title: 'Case Closed by Case Manager',
+      detail: 'Case Manager closed this case after referral processing was completed.',
+      icon: 'inventory',
+      logoUrl: '/logo.png',
+      sortAt: closedAt,
+    })
+  }
+
+  return entries
+    .sort((a, b) => new Date(a.sortAt).getTime() - new Date(b.sortAt).getTime())
+    .map(({ sortAt: _sortAt, ...entry }) => entry)
 }
 
 function buildTrackingAgenciesForManagedCase(referrals: CaseManagerReferral[]): TrackingAgencyCardData[] {
-  return referrals
-    .filter((referral) => isTrackingAgencyKey(referral.agencyId))
-    .map((referral) => {
-      const presentation = toTrackingStatusPresentation(referral.status)
-      const meta = TRACKING_AGENCY_META[referral.agencyId]
+  return referrals.map((referral) => {
+    const presentation = toTrackingStatusPresentation(referral.status)
+    const isTrackingAgency = isTrackingAgencyKey(referral.agencyId)
+    const meta = isTrackingAgency ? TRACKING_AGENCY_META[referral.agencyId] : undefined
 
-      return {
-        name: meta.short,
-        note: toAgencyStatusNote(referral.status),
-        status: presentation.label,
-        statusTone: presentation.statusTone,
-        borderTone: presentation.borderTone,
-        textTone: presentation.textTone,
-        lineTone: presentation.lineTone,
-        latestMilestoneLabel: toLatestMilestoneLabel(referral.status),
-        latestMilestonePath: meta.path,
-        steps: toTrackingSteps(referral.status),
-      }
-    })
+    return {
+      name: meta?.short ?? referral.agencyName,
+      note: toAgencyStatusNote(referral.status),
+      status: presentation.label,
+      statusTone: presentation.statusTone,
+      borderTone: presentation.borderTone,
+      textTone: presentation.textTone,
+      lineTone: presentation.lineTone,
+      latestMilestoneLabel: toLatestMilestoneLabel(referral.status),
+      latestMilestonePath: meta?.path,
+      steps: toTrackingSteps(referral.status),
+    }
+  })
 }
 
 function buildMilestoneInfoRows(caseRecord: CaseManagerCase): MilestoneInfoRow[] {
@@ -437,10 +515,221 @@ function buildInitialState(): CaseLifecycleState {
   // Milestones are only created when Agency Focal explicitly adds them via addManagedReferralMilestone()
   const allReferralMilestones = Object.fromEntries(seedReferrals.map((item) => [item.id, []]))
 
-  return {
+  const seeded: CaseLifecycleState = {
     cases: CASE_MANAGER_CASES.map((item) => ({ ...item })),
     referrals: seedReferrals.map((item) => ({ ...item, documents: item.documents.map((doc) => ({ ...doc })) })),
     milestonesByReferralId: allReferralMilestones,
+  }
+
+  return ensureOwwaSupplementalVolume(seeded)
+}
+
+function ensureOwwaSupplementalVolume(state: CaseLifecycleState): CaseLifecycleState {
+  const markerCasePrefix = 'MB-OWWA-2026-'
+  const markerReferralPrefix = 'ref-MB-OWWA-2026-'
+
+  const alreadySeeded = state.cases.some((item) => item.id.startsWith(markerCasePrefix))
+  if (alreadySeeded) {
+    return state
+  }
+
+  const owwaAgency = getCaseManagerAgencies().find((item) => item.id === 'owwa')
+  if (!owwaAgency) {
+    return state
+  }
+
+  const services = owwaAgency.services
+  const fallbackService = services[0] ?? 'OWWA Assistance'
+
+  const supplementalCases: CaseManagerCase[] = [
+    {
+      id: 'MB-OWWA-2026-1001',
+      caseNo: 'OW-A1N7K9P',
+      clientName: 'Alvarez, Danilo R.',
+      clientType: 'Overseas Filipino Worker',
+      service: services[0] ?? fallbackService,
+      milestone: 'Case Intake',
+      status: 'PROCESSING',
+      createdAt: '2026-04-02T08:14:00',
+      updatedAt: '2026-04-06T13:25:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+    {
+      id: 'MB-OWWA-2026-1002',
+      caseNo: 'OW-B3Q5D7R',
+      clientName: 'Benitez, Arlene S.',
+      clientType: 'Next of Kin',
+      service: services[1] ?? fallbackService,
+      milestone: 'Verification',
+      status: 'PENDING',
+      createdAt: '2026-04-03T09:42:00',
+      updatedAt: '2026-04-04T11:18:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+    {
+      id: 'MB-OWWA-2026-1003',
+      caseNo: 'OW-C9T2M4L',
+      clientName: 'Cabrera, Joel T.',
+      clientType: 'Overseas Filipino Worker',
+      service: services[2] ?? fallbackService,
+      milestone: 'Document Review',
+      status: 'COMPLETED',
+      createdAt: '2026-04-01T10:05:00',
+      updatedAt: '2026-04-09T16:30:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+    {
+      id: 'MB-OWWA-2026-1004',
+      caseNo: 'OW-D6V8H1N',
+      clientName: 'Domingo, Kristine P.',
+      clientType: 'Overseas Filipino Worker',
+      service: services[0] ?? fallbackService,
+      milestone: 'Agency Coordination',
+      status: 'PROCESSING',
+      createdAt: '2026-04-05T08:55:00',
+      updatedAt: '2026-04-10T12:47:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+    {
+      id: 'MB-OWWA-2026-1005',
+      caseNo: 'OW-E4P9S3X',
+      clientName: 'Escobar, Maria L.',
+      clientType: 'Next of Kin',
+      service: services[1] ?? fallbackService,
+      milestone: 'Case Intake',
+      status: 'PENDING',
+      createdAt: '2026-04-07T14:18:00',
+      updatedAt: '2026-04-08T09:39:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+    {
+      id: 'MB-OWWA-2026-1006',
+      caseNo: 'OW-F7K1W5Y',
+      clientName: 'Ferrer, Noel A.',
+      clientType: 'Overseas Filipino Worker',
+      service: services[2] ?? fallbackService,
+      milestone: 'Validation',
+      status: 'COMPLETED',
+      createdAt: '2026-04-06T11:23:00',
+      updatedAt: '2026-04-12T15:05:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+    {
+      id: 'MB-OWWA-2026-1007',
+      caseNo: 'OW-G2R6C8U',
+      clientName: 'Guerrero, Sheila M.',
+      clientType: 'Overseas Filipino Worker',
+      service: services[0] ?? fallbackService,
+      milestone: 'Eligibility Check',
+      status: 'PROCESSING',
+      createdAt: '2026-04-08T07:40:00',
+      updatedAt: '2026-04-13T10:32:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+    {
+      id: 'MB-OWWA-2026-1008',
+      caseNo: 'OW-H5L3Z9B',
+      clientName: 'Hernando, Patrick J.',
+      clientType: 'Next of Kin',
+      service: services[1] ?? fallbackService,
+      milestone: 'Document Intake',
+      status: 'PENDING',
+      createdAt: '2026-04-09T09:12:00',
+      updatedAt: '2026-04-10T14:20:00',
+      agencyId: owwaAgency.id,
+      agencyShort: owwaAgency.short,
+      agencyName: owwaAgency.name,
+    },
+  ]
+
+  const supplementalReferrals: CaseManagerReferral[] = supplementalCases.flatMap((caseItem, index) => {
+    const primaryReferral: CaseManagerReferral = {
+      id: `${markerReferralPrefix}${index + 1}`,
+      caseId: caseItem.id,
+      caseNo: caseItem.caseNo,
+      clientName: caseItem.clientName,
+      service: caseItem.service,
+      agencyId: owwaAgency.id,
+      agencyName: owwaAgency.name,
+      status: caseItem.status,
+      createdAt: caseItem.createdAt,
+      updatedAt: caseItem.updatedAt,
+      remarks: 'Supplemental OWWA referral generated for reporting volume.',
+      notes: 'Synthetic referral entry to simulate OWWA-heavy workload.',
+      documents: [
+        {
+          id: `doc-${caseItem.id}-1`,
+          name: `Referral_Endorsement_${caseItem.caseNo}.pdf`,
+          uploadedBy: 'Case Manager - Marychris M. Relon',
+          uploadedAt: caseItem.createdAt,
+        },
+      ],
+    }
+
+    const shouldAddFollowUpReferral = index % 2 === 0
+    if (!shouldAddFollowUpReferral) {
+      return [primaryReferral]
+    }
+
+    const followUpCreatedAt = new Date(new Date(caseItem.createdAt).getTime() + 1000 * 60 * 90).toISOString()
+    const followUpUpdatedAt = new Date(new Date(caseItem.updatedAt).getTime() + 1000 * 60 * 180).toISOString()
+    const followUpReferral: CaseManagerReferral = {
+      ...primaryReferral,
+      id: `${markerReferralPrefix}${index + 1}-FU`,
+      service: services[(index + 1) % Math.max(services.length, 1)] ?? fallbackService,
+      createdAt: followUpCreatedAt,
+      updatedAt: followUpUpdatedAt,
+      status: primaryReferral.status === 'PENDING' ? 'PROCESSING' : primaryReferral.status,
+      remarks: 'Follow-up referral for the same OWWA-managed case.',
+      notes: 'Additional OWWA handling stage for volume simulation.',
+    }
+
+    return [primaryReferral, followUpReferral]
+  })
+
+  const existingCaseIds = new Set(state.cases.map((item) => item.id))
+  const existingReferralIds = new Set(state.referrals.map((item) => item.id))
+
+  const nextCases = [...state.cases]
+  supplementalCases.forEach((item) => {
+    if (!existingCaseIds.has(item.id)) {
+      nextCases.push(item)
+    }
+  })
+
+  const nextReferrals = [...state.referrals]
+  supplementalReferrals.forEach((item) => {
+    if (!existingReferralIds.has(item.id)) {
+      nextReferrals.push(item)
+    }
+  })
+
+  const nextMilestones = { ...state.milestonesByReferralId }
+  supplementalReferrals.forEach((item) => {
+    if (!nextMilestones[item.id]) {
+      nextMilestones[item.id] = []
+    }
+  })
+
+  return {
+    ...state,
+    cases: nextCases,
+    referrals: nextReferrals,
+    milestonesByReferralId: nextMilestones,
   }
 }
 
@@ -505,10 +794,11 @@ function readState(): CaseLifecycleState {
     }
     // Clean up and persist invalid milestone removals so stale entries don't resurface.
     const cleaned = cleanupInvalidMilestones(parsed)
-    if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
-      writeState(cleaned)
+    const supplemented = ensureOwwaSupplementalVolume(cleaned)
+    if (JSON.stringify(supplemented) !== JSON.stringify(parsed)) {
+      writeState(supplemented)
     }
-    return cleaned
+    return supplemented
   } catch {
     const seed = buildInitialState()
     writeState(seed)

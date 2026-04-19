@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
-import { toCaseHealthStatus, type CaseManagerCase } from '../../data/unifiedData'
-import { getSpecialCategories } from '../../data/unifiedData'
-import { getManagedCases } from '../../data/caseLifecycleStore'
+import { getCaseManagerAgencies, getClientPersona, getSpecialCategories, toCaseHealthStatus, type CaseManagerCase } from '../../data/unifiedData'
+import { getManagedCases, getManagedReferralsByCaseId } from '../../data/caseLifecycleStore'
 
 type StatusFilter = 'ALL' | 'OPEN' | 'CLOSED'
 type ClientTypeFilter = 'ALL' | 'Overseas Filipino Worker' | 'Next of Kin'
@@ -13,6 +12,9 @@ type SpecialCategoryFilter = 'ALL' | 'Senior Citizen' | 'PWD' | 'Solo Parent' | 
 type CaseViewRow = CaseManagerCase & {
   caseStatus: 'OPEN' | 'CLOSED'
   specialCategory: string
+  displayClientName: string
+  referredTo: string
+  referredToLogoUrl: string
 }
 
 function formatTimestamp(timestamp: string): string {
@@ -30,6 +32,19 @@ function formatTimestamp(timestamp: string): string {
     second: '2-digit',
     hour12: true,
   }).format(parsed)
+}
+
+function formatReferredToSummary(referredTo: string): string {
+  const agencies = referredTo
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  if (agencies.length <= 1) {
+    return agencies[0] ?? 'N/A'
+  }
+
+  return `${agencies[0]} +${agencies.length - 1} more`
 }
 
 export default function CasesPage() {
@@ -50,19 +65,46 @@ export default function CasesPage() {
     specialCategory: true,
     createdAt: true,
     caseStatus: true,
+    referredTo: true,
     actions: true,
   })
+
+  const agenciesById = useMemo(
+    () =>
+      getCaseManagerAgencies().reduce<Record<string, { name: string; logoUrl: string }>>((acc, agency) => {
+        acc[agency.id] = { name: agency.name, logoUrl: agency.logoUrl }
+        return acc
+      }, {}),
+    [],
+  )
 
   const rows = useMemo<CaseViewRow[]>(() => {
     return getManagedCases().map((item) => ({
       ...item,
       caseStatus: toCaseHealthStatus(item.status),
+      displayClientName:
+        item.clientType === 'Next of Kin'
+          ? item.nextOfKinProfile?.fullName || getClientPersona(item.caseNo).kinName
+          : item.ofwProfile?.fullName || getClientPersona(item.caseNo).ofwName,
+      referredTo: (() => {
+        const agencies = Array.from(new Set(getManagedReferralsByCaseId(item.id).map((referral) => referral.agencyName)))
+        if (agencies.length === 0) {
+          return item.agencyName
+        }
+
+        return agencies.join(', ')
+      })(),
+      referredToLogoUrl: (() => {
+        const referralAgencyIds = Array.from(new Set(getManagedReferralsByCaseId(item.id).map((referral) => referral.agencyId)))
+        const firstAgencyId = referralAgencyIds[0] ?? item.agencyId
+        return agenciesById[firstAgencyId]?.logoUrl ?? '/logo.png'
+      })(),
       specialCategory: (() => {
-        const categories = item.ofwProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
+        const categories = item.nextOfKinProfile?.specialCategories ?? item.ofwProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
         return categories.length > 0 ? categories.join(', ') : 'None'
       })(),
     }))
-  }, [])
+  }, [agenciesById])
 
   const filteredCases = useMemo(() => {
     const query = searchValue.trim().toLowerCase()
@@ -70,7 +112,7 @@ export default function CasesPage() {
     return rows.filter((item) => {
       const matchesSearch =
         query.length === 0 ||
-        [item.id, item.caseNo, item.clientName, item.clientType, item.specialCategory]
+        [item.id, item.caseNo, item.displayClientName, item.clientType, item.specialCategory, item.referredTo]
           .join(' ')
           .toLowerCase()
           .includes(query)
@@ -159,7 +201,8 @@ export default function CasesPage() {
     {
       key: 'caseNo',
       title: 'TRACKING ID',
-      render: (row) => <span className="font-bold text-[#0b5384] text-[15px] leading-tight">{row.caseNo}</span>,
+      className: 'whitespace-nowrap',
+      render: (row) => <span className="font-bold text-[#0b5384] text-[15px] whitespace-nowrap">{row.caseNo}</span>,
     },
     {
       key: 'clientType',
@@ -169,7 +212,7 @@ export default function CasesPage() {
     {
       key: 'clientName',
       title: 'CLIENT NAME',
-      render: (row) => <span className="font-bold text-[15px] text-slate-800">{row.clientName}</span>,
+      render: (row) => <span className="font-bold text-[15px] text-slate-800">{row.displayClientName}</span>,
     },
     {
       key: 'specialCategory',
@@ -195,6 +238,18 @@ export default function CasesPage() {
         >
           {row.caseStatus}
         </span>
+      ),
+    },
+    {
+      key: 'referredTo',
+      title: 'REFERRED TO',
+      className: 'whitespace-nowrap text-center',
+      render: (row) => (
+        <div className="flex justify-center" title={row.referredTo}>
+          <div className="h-7 w-7 overflow-hidden rounded-full border border-white bg-white shadow-sm">
+            <img src={row.referredToLogoUrl} alt="Referred agency" className="h-full w-full object-contain p-[1px]" />
+          </div>
+        </div>
       ),
     },
     {
