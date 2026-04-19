@@ -149,7 +149,7 @@ function buildCaseTimeline(
       logoType: 'bayanihan',
       actorName: actors.caseManager.name,
       title: 'Referral Sent',
-      description: `Case was endorsed to ${referralRow.agency} for ${referralRow.service}.`,
+      description: `Case was referred to ${referralRow.agency} for ${referralRow.service}.`,
       timestamp: referralRow.dateReferredIso,
     })
 

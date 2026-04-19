@@ -540,7 +540,7 @@ export default function DashboardPage() {
           
           <section className="space-y-2">
              {/* QUICK ACTIONS */}
-             <button onClick={() => navigate('/case-manager/cases')} className="w-full py-3 px-4 bg-orange-500 text-white rounded-lg flex items-center justify-between shadow-sm shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+             <button onClick={() => navigate('/case-manager/cases/new')} className="w-full py-3 px-4 bg-orange-500 text-white rounded-lg flex items-center justify-between shadow-sm shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
                 <span className="flex items-center gap-2 text-[12px] font-bold font-label">
                   <Plus className="w-4 h-4" /> Create New Case
                 </span>

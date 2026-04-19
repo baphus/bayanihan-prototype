@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from '
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
-import { formatDisplayDateTime, getAgencyFocalByAgencyId, getCaseManagerAgencies, type CaseManagerReferral } from '../../data/unifiedData'
+import {
+  formatDisplayDateTime,
+  getAgencyFocalByAgencyId,
+  getCaseManagerAgencies,
+  getStakeholderServiceDetails,
+  type CaseManagerReferral,
+} from '../../data/unifiedData'
 import { getManagedReferralById, updateManagedReferral } from '../../data/caseLifecycleStore'
 
 type TimelineItem = {
@@ -31,6 +37,22 @@ function withOffsetMinutes(iso: string, minutes: number): string {
   return new Date(new Date(iso).getTime() + minutes * 60000).toISOString()
 }
 
+function getReferralAgeLabel(createdAtIso: string): string {
+  const created = new Date(createdAtIso).getTime()
+  const now = Date.now()
+  const diffMs = Math.max(0, now - created)
+
+  const totalHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+
+  if (days === 0) {
+    return `${hours} hour${hours === 1 ? '' : 's'}`
+  }
+
+  return `${days} day${days === 1 ? '' : 's'} ${hours} hour${hours === 1 ? '' : 's'}`
+}
+
 function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
   const agencyFocal = getAgencyFocalByAgencyId(referral.agencyId)
   const agencyActor = `Agency Focal - ${agencyFocal.name}`
@@ -41,7 +63,7 @@ function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
       actorType: 'Case Manager',
       logoType: 'bayanihan',
       title: 'Referral Sent',
-      description: `Case was endorsed to ${referral.agencyName} for ${referral.service}.`,
+      description: `Case was referred to ${referral.agencyName} for ${referral.service}.`,
       timestamp: referral.createdAt,
       actor: 'Case Manager - Marychris M. Relon',
     },
@@ -159,10 +181,15 @@ export default function ReferralViewPage() {
   const orderedTimeline = [...timeline].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
   const documents = referral.documents ?? []
   const notes = referral.notes?.trim().length ? referral.notes : referral.remarks
+  const referralAge = getReferralAgeLabel(referral.createdAt)
   const trimmedNotesDraft = notesDraft.trim()
   const isNotesChanged = trimmedNotesDraft !== referral.notes.trim()
   const hasPendingUploads = newDocuments.length > 0
   const canSaveUpdates = isNotesChanged || hasPendingUploads
+  const serviceRequirementDetail = useMemo(() => {
+    return getStakeholderServiceDetails(referral.agencyId).find((service) => service.title === referral.service)
+  }, [referral.agencyId, referral.service])
+  const requiredServiceDocuments = serviceRequirementDetail?.requiredDocuments ?? []
 
   const handleDocumentSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
@@ -256,10 +283,42 @@ export default function ReferralViewPage() {
               <HeaderMeta label="Status" value={referral.status} statusClass={getStatusBadgeClass(referral.status)} />
               <HeaderMeta label="Associated Case No." value={referral.caseId} />
               <HeaderMeta label="Tracking ID" value={referral.caseNo} />
+              <HeaderMeta label="Service Needed" value={referral.service} />
               <HeaderMeta label="Date Referred" value={formatDisplayDateTime(referral.createdAt)} />
+              <HeaderMeta label="Referral Age" value={referralAge} />
               <HeaderMeta label="Last Updated" value={formatDisplayDateTime(referral.updatedAt)} />
             </div>
           </section>
+
+          <SectionCard title="Service Requirement Details">
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] px-3 py-2">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500">Service Needed</p>
+                  <p className="mt-1 text-[12px] font-semibold text-slate-700">{referral.service}</p>
+                </div>
+                <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] px-3 py-2">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500">Estimated Processing Time</p>
+                  <p className="mt-1 text-[12px] font-semibold text-slate-700">
+                    {serviceRequirementDetail ? `${serviceRequirementDetail.processingDays} business day(s)` : 'Not specified'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] px-3 py-3">
+                <p className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500">Required Documents</p>
+                {requiredServiceDocuments.length > 0 ? (
+                  <ul className="mt-2 space-y-1">
+                    {requiredServiceDocuments.map((document) => (
+                      <li key={document} className="text-[12px] text-slate-700">- {document}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-[11px] text-slate-500">No required documents listed for this service.</p>
+                )}
+              </div>
+            </div>
+          </SectionCard>
 
           <SectionCard title="Referral Notes">
             <div className="border border-[#d8dee8] bg-[#f8fafc] px-4 py-3 text-[13px] leading-6 text-slate-600">
