@@ -4,6 +4,7 @@ import { Check, ChevronRight, ChevronLeft } from 'lucide-react'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { AppButton } from '../../components/ui/AppButton'
 import AddressFieldGroup from '../../components/ui/AddressFieldGroup'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import {
   CASE_MANAGER_CASES,
   createEmptyAddressParts,
@@ -177,6 +178,7 @@ export default function NewCasePage() {
   const [lastJobPosition, setLastJobPosition] = useState('')
   const [arrivalDate, setArrivalDate] = useState('')
   const [caseNarrative, setCaseNarrative] = useState('')
+  const [isCreateConfirmOpen, setIsCreateConfirmOpen] = useState(false)
 
   const selectedExistingClient = existingClients.find((item) => item.id === selectedExistingClientId)
   const selectedExistingClientProfile = useMemo(
@@ -226,6 +228,17 @@ export default function NewCasePage() {
     setKinAddress({ ...selectedExistingClientProfile.kinAddress })
   }, [clientSource, selectedExistingClientProfile])
 
+  useEffect(() => {
+    if (hasNextOfKin) {
+      return
+    }
+
+    setKinNameParts({ firstName: '', middleInitial: '', lastName: '', suffix: '' })
+    setKinContact('')
+    setKinEmail('')
+    setKinAddress(createEmptyAddressParts())
+  }, [hasNextOfKin])
+
   const canProceedToNextStep = () => {
     if (currentStep === 1) return true
     if (currentStep === 2) {
@@ -239,6 +252,10 @@ export default function NewCasePage() {
   const canSubmit = currentStep === 3 && (clientSource === 'existing'
     ? selectedExistingClientId.trim().length > 0
     : ofwNameParts.firstName.trim().length > 0 && ofwNameParts.lastName.trim().length > 0)
+
+  const ofwDisplayName = composeNameParts(ofwNameParts).trim() || selectedExistingClient?.clientName || 'Unnamed Client'
+  const kinDisplayName = composeNameParts(kinNameParts).trim()
+  const caseNarrativePreview = caseNarrative.trim()
 
   const handleNext = () => {
     if (canProceedToNextStep() && currentStep < 3) {
@@ -258,10 +275,7 @@ export default function NewCasePage() {
     }
 
     const nowIso = new Date().toISOString()
-    const clientName =
-      clientSource === 'existing'
-        ? formatPersonName(composeNameParts(ofwNameParts).trim() || selectedExistingClient?.clientName || 'Unnamed Client')
-        : formatPersonName(composeNameParts(ofwNameParts).trim() || 'Unnamed Client')
+    const clientName = formatPersonName(ofwDisplayName)
 
     const createdCasePayload = {
       id: caseId,
@@ -315,8 +329,17 @@ export default function NewCasePage() {
     navigate(`/case-manager/cases/${caseId}`, {
       state: {
         createdCase: createdCasePayload,
+        toastMessage: `Case created - "${caseId}"`,
       },
     })
+  }
+
+  const handleCreateCaseClick = () => {
+    if (!canSubmit) {
+      return
+    }
+
+    setIsCreateConfirmOpen(true)
   }
 
   return (
@@ -938,6 +961,37 @@ export default function NewCasePage() {
                   </Field>
                 </div>
               </div>
+
+              <div className="rounded-xl border border-slate-200 bg-[#fcfdff] p-6 shadow-sm">
+                <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-500">Case Summary</h3>
+                <p className="mt-2 text-[13px] text-slate-500">Review the core case details before you finalize creation.</p>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Case No.">
+                    <div className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700 flex items-center">{caseId}</div>
+                  </Field>
+                  <Field label="Tracking ID">
+                    <div className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700 flex items-center">{trackingId}</div>
+                  </Field>
+                  <Field label="Client Type">
+                    <div className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700 flex items-center">{clientType}</div>
+                  </Field>
+                  <Field label="OFW Client">
+                    <div className="h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 text-[13px] text-slate-700 flex items-center">{formatPersonName(ofwDisplayName)}</div>
+                  </Field>
+                  <Field label="Next of Kin" className="md:col-span-2">
+                    <div className="min-h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700 flex items-center">
+                      {hasNextOfKin
+                        ? (kinDisplayName.length > 0 ? formatPersonName(kinDisplayName) : 'Not yet provided')
+                        : 'No next of kin indicated'}
+                    </div>
+                  </Field>
+                  <Field label="Narrative Preview" className="md:col-span-2">
+                    <div className="min-h-[90px] w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700 whitespace-pre-wrap">
+                      {caseNarrativePreview.length > 0 ? caseNarrativePreview : 'No narrative provided.'}
+                    </div>
+                  </Field>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -963,7 +1017,7 @@ export default function NewCasePage() {
           ) : (
             <AppButton
               disabled={!canSubmit}
-              onClick={handleCreateCase}
+              onClick={handleCreateCaseClick}
               className="min-w-[140px] bg-green-600 hover:bg-green-700 border-none text-white"
             >
               <Check size={16} /> Create Case
@@ -973,6 +1027,18 @@ export default function NewCasePage() {
       </div>
     </div>
     </section>
+    <ConfirmDialog
+      open={isCreateConfirmOpen}
+      title="Confirm Case Creation"
+      message={`Create case ${caseId} for ${formatPersonName(ofwDisplayName)}?`}
+      confirmLabel="Create Case"
+      cancelLabel="Review Again"
+      onConfirm={() => {
+        setIsCreateConfirmOpen(false)
+        handleCreateCase()
+      }}
+      onCancel={() => setIsCreateConfirmOpen(false)}
+    />
   </div>
   )
 }

@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, type JSX } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Eye } from 'lucide-react'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
+import AppToast from '../../components/ui/AppToast'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import {
   formatAddressParts,
@@ -80,6 +81,7 @@ type CreatedCaseState = {
     agencyName: string
     caseNarrative?: string
   }
+  toastMessage?: string
 }
 
 function withOffsetMinutes(iso: string, minutes: number): string {
@@ -274,6 +276,28 @@ export default function CaseViewPage(): JSX.Element {
   }
 
   const persona = getClientPersona(caseRecord.caseNo)
+  const hasExplicitNoNextOfKin = Boolean(caseRecord.ofwProfile) && !caseRecord.nextOfKinProfile
+  const ofwDetails = {
+    fullName: caseRecord.ofwProfile?.fullName || persona.ofwName,
+    birthDate: caseRecord.ofwProfile?.birthDate || persona.ofwBirth,
+    gender: caseRecord.ofwProfile?.gender || persona.gender,
+    email: caseRecord.ofwProfile?.email || persona.ofwEmail,
+    contact: caseRecord.ofwProfile?.contact || persona.ofwContact,
+    address: caseRecord.ofwProfile?.address || persona.ofwAddress,
+  }
+  const workHistory = {
+    lastCountry: caseRecord.workHistory?.lastCountry || persona.lastCountry,
+    lastJob: caseRecord.workHistory?.lastJob || persona.lastJob,
+    arrivalDate: caseRecord.workHistory?.arrivalDate || persona.arrivalDate,
+  }
+  const nextOfKinDetails = hasExplicitNoNextOfKin
+    ? null
+    : {
+        fullName: caseRecord.nextOfKinProfile?.fullName || persona.kinName,
+        contact: caseRecord.nextOfKinProfile?.contact || persona.kinContact,
+        email: caseRecord.nextOfKinProfile?.email || persona.kinEmail,
+        address: caseRecord.nextOfKinProfile?.address || persona.kinAddress,
+      }
   const primaryClientName =
     caseRecord.clientType === 'Next of Kin'
       ? caseRecord.nextOfKinProfile?.fullName || persona.kinName
@@ -283,7 +307,9 @@ export default function CaseViewPage(): JSX.Element {
   const ofwSpecialCategories =
     caseRecord.ofwProfile?.specialCategories || (caseRecord.clientType === 'Overseas Filipino Worker' ? fallbackSpecialCategories : [])
   const nextOfKinSpecialCategories =
-    caseRecord.nextOfKinProfile?.specialCategories || (caseRecord.clientType === 'Next of Kin' ? fallbackSpecialCategories : [])
+    hasExplicitNoNextOfKin
+      ? []
+      : (caseRecord.nextOfKinProfile?.specialCategories || (caseRecord.clientType === 'Next of Kin' ? fallbackSpecialCategories : []))
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false)
   const [isReferAgencyOpen, setIsReferAgencyOpen] = useState(false)
   const [editableClientType, setEditableClientType] = useState(caseRecord.clientType)
@@ -299,6 +325,7 @@ export default function CaseViewPage(): JSX.Element {
   const [referRemarks, setReferRemarks] = useState('')
   const [referNotes, setReferNotes] = useState('')
   const [referUploadedDocuments, setReferUploadedDocuments] = useState<File[]>([])
+  const [toastMessage, setToastMessage] = useState(routeState.toastMessage ?? '')
 
   const allAgencies = getCaseManagerAgencies()
   const referralRows = useMemo(() => {
@@ -494,6 +521,9 @@ export default function CaseViewPage(): JSX.Element {
 
   return (
     <div className="w-full pb-8 space-y-5">
+      {toastMessage.trim() ? (
+        <AppToast message={toastMessage} onClose={() => setToastMessage('')} tone="success" />
+      ) : null}
       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
         <Link to="/case-manager/cases" className="transition hover:text-[#0b5384]">Cases</Link>
         <span className="mx-2">&gt;</span>
@@ -551,13 +581,13 @@ export default function CaseViewPage(): JSX.Element {
             <div className="space-y-5">
               <Subsection title="OFW Information">
                 <div className="grid grid-cols-1 md:grid-cols-3 border border-[#d8dee8]">
-                  <InfoCell label="Full Name" value={persona.ofwName} />
-                  <InfoCell label="Date of Birth" value={persona.ofwBirth} />
-                  <InfoCell label="Gender" value={persona.gender} />
-                  <InfoCell label="Email Address" value={persona.ofwEmail} />
-                  <InfoCell label="Contact Number" value={persona.ofwContact} />
+                  <InfoCell label="Full Name" value={ofwDetails.fullName} />
+                  <InfoCell label="Date of Birth" value={ofwDetails.birthDate} />
+                  <InfoCell label="Gender" value={ofwDetails.gender} />
+                  <InfoCell label="Email Address" value={ofwDetails.email} />
+                  <InfoCell label="Contact Number" value={ofwDetails.contact} />
                   <InfoCell label=" " value=" " />
-                  <InfoCell label="Home Address" value={formatAddressParts(persona.ofwAddress)} fullRow />
+                  <InfoCell label="Home Address" value={formatAddressParts(ofwDetails.address)} fullRow />
                 </div>
 
                 {ofwSpecialCategories.length > 0 ? (
@@ -577,19 +607,25 @@ export default function CaseViewPage(): JSX.Element {
 
               <Subsection title="Work History">
                 <div className="grid grid-cols-1 md:grid-cols-3 border border-[#d8dee8]">
-                  <InfoCell label="Last Country" value={persona.lastCountry} />
-                  <InfoCell label="Last Job Position" value={persona.lastJob} />
-                  <InfoCell label="Arrival Date in Philippines" value={persona.arrivalDate} />
+                  <InfoCell label="Last Country" value={workHistory.lastCountry} />
+                  <InfoCell label="Last Job Position" value={workHistory.lastJob} />
+                  <InfoCell label="Arrival Date in Philippines" value={workHistory.arrivalDate} />
                 </div>
               </Subsection>
 
               <Subsection title="Next of Kin Information">
-                <div className="grid grid-cols-1 md:grid-cols-3 border border-[#d8dee8]">
-                  <InfoCell label="Full Name" value={persona.kinName} />
-                  <InfoCell label="Contact Number" value={persona.kinContact} />
-                  <InfoCell label="Email Address" value={persona.kinEmail} />
-                  <InfoCell label="Home Address" value={formatAddressParts(persona.kinAddress)} fullRow />
-                </div>
+                {nextOfKinDetails ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 border border-[#d8dee8]">
+                    <InfoCell label="Full Name" value={nextOfKinDetails.fullName} />
+                    <InfoCell label="Contact Number" value={nextOfKinDetails.contact} />
+                    <InfoCell label="Email Address" value={nextOfKinDetails.email} />
+                    <InfoCell label="Home Address" value={formatAddressParts(nextOfKinDetails.address)} fullRow />
+                  </div>
+                ) : (
+                  <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] px-3 py-2 text-[12px] text-slate-600">
+                    No next of kin indicated for this case.
+                  </div>
+                )}
                 {nextOfKinSpecialCategories.length > 0 ? (
                   <div className="mt-3 rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3">
                     <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#7c889b]">Vulnerability</p>
