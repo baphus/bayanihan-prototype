@@ -261,6 +261,72 @@ export function getAgencyFocalByAgencyId(agencyId: string): ReferralActor {
   return agencyFocal
 }
 
+export type AgencyFocalAccountStatus = 'ACTIVE' | 'INACTIVE'
+
+export type AgencyFocalAccount = {
+  id: string
+  agencyId: string
+  agencyName: string
+  agencyShort: string
+  name: string
+  email: string
+  role: 'Agency Focal'
+  status: AgencyFocalAccountStatus
+  contactNumber: string
+  lastLoginAt: string
+}
+
+function toEmailLocalPart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '.')
+}
+
+function toAgencyFocalEmail(name: string, agencyShort: string): string {
+  const local = toEmailLocalPart(name)
+  const domain = `${agencyShort.toLowerCase()}.gov.ph`
+
+  return `${local || 'agency.focal'}@${domain}`
+}
+
+export function getAgencyFocalAccountsByAgencyId(agencyId: string): AgencyFocalAccount[] {
+  const agency = getCaseManagerAgencies().find((item) => item.id === agencyId)
+
+  if (!agency) {
+    return []
+  }
+
+  const startIndex = computeStableIndex(agencyId, REFERRAL_ACTORS.agencyFocals.length)
+  const accountCount = (stableSeed(agencyId) % 2) + 1
+
+  return Array.from({ length: accountCount }, (_, index) => {
+    const actor = REFERRAL_ACTORS.agencyFocals[
+      (startIndex + index) % REFERRAL_ACTORS.agencyFocals.length
+    ]
+    const status: AgencyFocalAccountStatus = stableSeed(`${agencyId}-${actor.id}-${index}`) % 5 === 0
+      ? 'INACTIVE'
+      : 'ACTIVE'
+    const lastLoginAt = new Date(
+      new Date('2026-04-10T08:00:00').getTime() + stableSeed(`${agencyId}-${index}`) * 60_000,
+    ).toISOString()
+
+    return {
+      id: `agency-focal-${agencyId}-${actor.id}-${index + 1}`,
+      agencyId,
+      agencyName: agency.name,
+      agencyShort: agency.short,
+      name: actor.name,
+      email: toAgencyFocalEmail(actor.name, agency.short),
+      role: 'Agency Focal',
+      status,
+      contactNumber: `+63 917 ${(100 + (stableSeed(actor.id) % 900)).toString().padStart(3, '0')} ${(1000 + (stableSeed(agencyId) % 9000)).toString().padStart(4, '0')}`,
+      lastLoginAt,
+    }
+  })
+}
+
 export function getReferralCaseById(id: string): SharedReferralCase | undefined {
   return REFERRAL_CASES.find((item) => item.id === id)
 }
@@ -1280,11 +1346,12 @@ export type SystemAdminIntegrationSettings = {
 }
 
 export type NotificationTriggerKey =
-  | 'CASE_REGISTERED'
-  | 'REFERRAL_ACCEPTED'
-  | 'REFERRAL_REJECTED'
-  | 'REFERRAL_COMPLETED'
-  | 'MILESTONE_UPDATED'
+  | 'OFW_TRACKER_CASE_CREATED'
+  | 'OFW_TRACKER_CASE_COMPLETED'
+  | 'REFERRAL_STATUS_UPDATED'
+  | 'NEW_MILESTONE_EMAIL'
+  | 'REFERRAL_RECEIVED'
+  | 'GENERAL_ANNOUNCEMENT'
 
 export type NotificationTemplate = {
   subject: string
@@ -1449,39 +1516,46 @@ let SYSTEM_ADMIN_INTEGRATION_SETTINGS: SystemAdminIntegrationSettings = {
 
 let SYSTEM_ADMIN_NOTIFICATION_SETTINGS: SystemAdminNotificationSettings = {
   triggers: {
-    CASE_REGISTERED: {
+    OFW_TRACKER_CASE_CREATED: {
       enabled: true,
       template: {
-        subject: 'Your case {{case_id}} is now registered',
-        body: 'Hello {{client_name}}, your case {{case_id}} has been registered and queued for review.',
+        subject: '[OFW Tracker] Case Created - {{case_id}}',
+        body: 'Hello {{client_name}}, your case {{case_id}} has been created in OFW Tracker and is now queued for intake review.',
       },
     },
-    REFERRAL_ACCEPTED: {
+    OFW_TRACKER_CASE_COMPLETED: {
       enabled: true,
       template: {
-        subject: 'Referral accepted for case {{case_id}}',
-        body: 'The referral for {{client_name}} under case {{case_id}} has been accepted by the agency.',
+        subject: '[OFW Tracker] Case Completed - {{case_id}}',
+        body: 'Good news {{client_name}}. Your case {{case_id}} has been completed. For details, coordinate with {{agency_name}}.',
       },
     },
-    REFERRAL_REJECTED: {
+    REFERRAL_STATUS_UPDATED: {
       enabled: true,
       template: {
-        subject: 'Referral update: action needed for {{case_id}}',
-        body: 'The referral for {{client_name}} under case {{case_id}} was rejected. Please review remarks and resubmit.',
+        subject: '[Referral] Status Updated - {{case_id}}',
+        body: 'Referral status changed for {{client_name}} in case {{case_id}}. Please review the latest status update from {{agency_name}}.',
       },
     },
-    REFERRAL_COMPLETED: {
+    NEW_MILESTONE_EMAIL: {
       enabled: true,
       template: {
-        subject: 'Referral completed for case {{case_id}}',
-        body: 'Good news. The referral workflow for {{client_name}} in case {{case_id}} is now completed.',
+        subject: '[Milestone] New Update - {{case_id}}',
+        body: 'A new milestone ({{milestone}}) was posted for {{client_name}} in case {{case_id}}.',
       },
     },
-    MILESTONE_UPDATED: {
+    REFERRAL_RECEIVED: {
+      enabled: true,
+      template: {
+        subject: '[Referral] New Referral Received - {{case_id}}',
+        body: '{{agency_name}} has received a new referral for {{client_name}} under case {{case_id}}.',
+      },
+    },
+    GENERAL_ANNOUNCEMENT: {
       enabled: false,
       template: {
-        subject: 'Milestone updated for {{case_id}}',
-        body: 'A new milestone has been posted for {{client_name}} under case {{case_id}}.',
+        subject: '[System] Service Advisory',
+        body: 'This is a platform-wide advisory from the Bayanihan system administrator.',
       },
     },
   },
@@ -1490,13 +1564,15 @@ let SYSTEM_ADMIN_NOTIFICATION_SETTINGS: SystemAdminNotificationSettings = {
 let SYSTEM_ADMIN_NOTIFICATION_LOGS: NotificationDeliveryLog[] = CASE_MANAGER_CASES.slice(0, 20).map((item, index) => ({
   id: `notif-${item.id}`,
   timestamp: addMinutesToIso(item.updatedAt, index),
-  trigger: index % 4 === 0
-    ? 'REFERRAL_COMPLETED'
-    : index % 3 === 0
-      ? 'REFERRAL_REJECTED'
-      : index % 2 === 0
-        ? 'REFERRAL_ACCEPTED'
-        : 'CASE_REGISTERED',
+  trigger: index % 5 === 0
+        ? 'NEW_MILESTONE_EMAIL'
+        : index % 4 === 0
+          ? 'OFW_TRACKER_CASE_COMPLETED'
+          : index % 3 === 0
+            ? 'REFERRAL_STATUS_UPDATED'
+            : index % 2 === 0
+              ? 'REFERRAL_RECEIVED'
+              : 'OFW_TRACKER_CASE_CREATED',
   recipient: toRecipientEmail(item.clientName),
   status: index % 7 === 0 ? 'FAILED' : index % 5 === 0 ? 'QUEUED' : 'SENT',
   message:
@@ -1612,35 +1688,23 @@ export function getSystemAdminNotificationDeliveryLogs(): NotificationDeliveryLo
 }
 
 const CASE_MANAGER_DASHBOARD_TRIGGERS: NotificationTriggerKey[] = [
-  'REFERRAL_ACCEPTED',
-  'REFERRAL_REJECTED',
+  'REFERRAL_STATUS_UPDATED',
+  'NEW_MILESTONE_EMAIL',
 ]
 
 const AGENCY_DASHBOARD_TRIGGERS: NotificationTriggerKey[] = [
-  'REFERRAL_ACCEPTED',
+  'REFERRAL_RECEIVED',
 ]
 
 function toAgencyDashboardMessage(log: NotificationDeliveryLog): string {
   const matchedCase = CASE_MANAGER_CASES.find((item) => `notif-${item.id}` === log.id)
   const caseLabel = matchedCase ? `${matchedCase.caseNo} (${matchedCase.clientName})` : 'Unknown case'
 
-  if (log.trigger === 'REFERRAL_ACCEPTED') {
+  if (log.trigger === 'REFERRAL_RECEIVED') {
     return `New referral: ${caseLabel} was referred to your agency.`
   }
 
-  if (log.trigger === 'REFERRAL_REJECTED') {
-    return `New referral: ${caseLabel} was referred to your agency.`
-  }
-
-  if (log.trigger === 'REFERRAL_COMPLETED') {
-    return `New referral: ${caseLabel} was referred to your agency.`
-  }
-
-  if (log.trigger === 'MILESTONE_UPDATED') {
-    return `New referral: ${caseLabel} was referred to your agency.`
-  }
-
-  return `New referral: ${caseLabel} was referred to your agency.`
+  return `Agency email update for ${caseLabel}. Review your inbox for full details.`
 }
 
 function toCaseManagerDashboardMessage(log: NotificationDeliveryLog): string {
@@ -1648,12 +1712,12 @@ function toCaseManagerDashboardMessage(log: NotificationDeliveryLog): string {
   const caseLabel = matchedCase ? `${matchedCase.caseNo} (${matchedCase.clientName})` : 'Unknown case'
   const agencyName = matchedCase?.agencyName ?? 'Agency'
 
-  if (log.trigger === 'REFERRAL_ACCEPTED') {
-    return `Referral accepted by ${agencyName} for ${caseLabel}. Remarks: Agency accepted the referral and started processing.`
+  if (log.trigger === 'REFERRAL_STATUS_UPDATED') {
+    return `Referral status updated by ${agencyName} for ${caseLabel}. Please review the latest referral state.`
   }
 
-  if (log.trigger === 'REFERRAL_REJECTED') {
-    return `Referral rejected by ${agencyName} for ${caseLabel}. Remarks: Agency returned the referral for follow-up and correction.`
+  if (log.trigger === 'NEW_MILESTONE_EMAIL') {
+    return `New milestone email for ${caseLabel}. Track progress and coordinate next actions with ${agencyName}.`
   }
 
   return `Referral update from ${agencyName} for ${caseLabel}. Remarks: Please review the latest agency action.`

@@ -175,25 +175,6 @@ export default function AuditLoggingPage() {
       render: (row) => <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">{MODULE_LABELS[row.module]}</span>,
     },
     {
-      key: 'level',
-      title: 'LEVEL',
-      render: (row) => (
-        <span
-          className={`inline-flex rounded-[2px] border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${
-            row.level === 'CRITICAL'
-              ? 'border-[#fecaca] bg-[#fee2e2] text-[#991b1b]'
-              : row.level === 'ERROR'
-                ? 'border-[#fecaca] bg-[#fff1f2] text-[#be123c]'
-                : row.level === 'WARNING'
-                  ? 'border-[#fcd34d] bg-[#fef3c7] text-[#92400e]'
-                  : 'border-[#cbd5e1] bg-[#f8fafc] text-slate-700'
-          }`}
-        >
-          {row.level}
-        </span>
-      ),
-    },
-    {
       key: 'actor',
       title: 'ACTOR',
       render: (row) => <span className="text-[12px] text-slate-700">{row.actor}</span>,

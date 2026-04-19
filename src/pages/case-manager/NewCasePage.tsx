@@ -4,6 +4,7 @@ import { Check, ChevronRight, ChevronLeft } from 'lucide-react'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { AppButton } from '../../components/ui/AppButton'
 import AddressFieldGroup from '../../components/ui/AddressFieldGroup'
+import CountryCodePhoneInput from '../../components/ui/CountryCodePhoneInput'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import {
   CASE_MANAGER_CASES,
@@ -605,7 +606,7 @@ export default function NewCasePage() {
                           <input value={ofwEmail} onChange={(event) => setOfwEmail(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
                         </Field>
                         <Field label="Contact Number">
-                          <input value={ofwContact} onChange={(event) => setOfwContact(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                          <CountryCodePhoneInput value={ofwContact} onChange={setOfwContact} />
                         </Field>
                         <AddressFieldGroup
                           className="md:col-span-3"
@@ -682,7 +683,7 @@ export default function NewCasePage() {
                             </select>
                           </Field>
                           <Field label="Contact Number">
-                            <input value={kinContact} onChange={(event) => setKinContact(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                            <CountryCodePhoneInput value={kinContact} onChange={setKinContact} />
                           </Field>
                           <Field label="Email Address">
                             <input value={kinEmail} onChange={(event) => setKinEmail(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
@@ -773,11 +774,7 @@ export default function NewCasePage() {
                 </Field>
 
                 <Field label="Contact Number">
-                  <input
-                    value={ofwContact}
-                    onChange={(event) => setOfwContact(event.target.value)}
-                    className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                  />
+                  <CountryCodePhoneInput value={ofwContact} onChange={setOfwContact} />
                 </Field>
 
                 <AddressFieldGroup
@@ -914,11 +911,7 @@ export default function NewCasePage() {
                       </Field>
 
                       <Field label="Contact Number">
-                        <input
-                          value={kinContact}
-                          onChange={(event) => setKinContact(event.target.value)}
-                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        />
+                        <CountryCodePhoneInput value={kinContact} onChange={setKinContact} />
                       </Field>
 
                       <Field label="Email Address">

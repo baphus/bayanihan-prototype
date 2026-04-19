@@ -18,7 +18,15 @@ import { exportToCsv, type ExportColumn } from '../../utils/export/exportCsv'
 import { exportToPdf } from '../../utils/export/exportPdf'
 import { validateTemplatePlaceholders } from '../../utils/systemAdminValidation'
 
-const TEMPLATE_KEYS = ['case_id', 'client_name', 'milestone', 'agency_name']
+const TEMPLATE_KEYS = [
+  'case_id',
+  'client_name',
+  'milestone',
+  'agency_name',
+  'referral_status',
+  'tracker_number',
+  'support_email',
+]
 
 function toTriggerLabel(trigger: NotificationTriggerKey): string {
   return trigger.replaceAll('_', ' ')
@@ -27,7 +35,7 @@ function toTriggerLabel(trigger: NotificationTriggerKey): string {
 export default function NotificationsPage() {
   const [settings, setSettings] = useState<SystemAdminNotificationSettings>(() => getSystemAdminNotificationSettings())
   const [logs, setLogs] = useState<NotificationDeliveryLog[]>(() => getSystemAdminNotificationDeliveryLogs())
-  const [activeTrigger, setActiveTrigger] = useState<NotificationTriggerKey>('CASE_REGISTERED')
+  const [activeTrigger, setActiveTrigger] = useState<NotificationTriggerKey>('OFW_TRACKER_CASE_CREATED')
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | NotificationDeliveryStatus>('ALL')
   const [triggerFilter, setTriggerFilter] = useState<'ALL' | NotificationTriggerKey>('ALL')
@@ -135,7 +143,7 @@ export default function NotificationsPage() {
     { header: 'Message', accessor: (row) => row.message },
   ]
 
-  const saveNotificationSettings = () => {
+  const saveEmailSettings = () => {
     const triggerConfig = settings.triggers[activeTrigger]
     const subjectError = validateTemplatePlaceholders(triggerConfig.template.subject, TEMPLATE_KEYS)
     const bodyError = validateTemplatePlaceholders(triggerConfig.template.body, TEMPLATE_KEYS)
@@ -155,14 +163,14 @@ export default function NotificationsPage() {
       message: 'Template settings updated and queued for propagation.',
     })
     setLogs(getSystemAdminNotificationDeliveryLogs())
-    setMessage('Notification settings saved.')
+    setMessage('Email template settings saved.')
   }
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-6">
       <header>
-        <h1 className={pageHeadingStyles.pageTitle}>Notifications</h1>
-        <p className={pageHeadingStyles.pageSubtitle}>Configure trigger-based emails and monitor delivery outcomes.</p>
+        <h1 className={pageHeadingStyles.pageTitle}>Emails</h1>
+        <p className={pageHeadingStyles.pageSubtitle}>Configure trigger-based email templates and monitor delivery outcomes.</p>
       </header>
 
       {message ? (
@@ -209,7 +217,7 @@ export default function NotificationsPage() {
 
             <SystemSettingField
               label="Subject"
-              helpText="Allowed placeholders: {{case_id}}, {{client_name}}, {{milestone}}, {{agency_name}}"
+              helpText="Allowed placeholders: {{case_id}}, {{client_name}}, {{milestone}}, {{agency_name}}, {{referral_status}}, {{tracker_number}}, {{support_email}}"
               error={validationError}
             >
               <input
@@ -259,10 +267,10 @@ export default function NotificationsPage() {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={saveNotificationSettings}
+                onClick={saveEmailSettings}
                 className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white hover:bg-[#09416a]"
               >
-                Save Notification Settings
+                Save Email Settings
               </button>
             </div>
           </div>
@@ -290,11 +298,11 @@ export default function NotificationsPage() {
 
       <section className="rounded-[4px] border border-[#cbd5e1] bg-white p-4 shadow-sm space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className={pageHeadingStyles.sectionTitle}>Notification Delivery Logs</h2>
+          <h2 className={pageHeadingStyles.sectionTitle}>Email Delivery Logs</h2>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => exportToCsv(filteredLogs, exportColumns, 'notification-logs.csv')}
+              onClick={() => exportToCsv(filteredLogs, exportColumns, 'email-logs.csv')}
               className="inline-flex h-8 items-center gap-2 rounded-[3px] border border-[#cbd5e1] bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-[#0b5a8c]"
             >
               <Download className="h-3.5 w-3.5" />
@@ -302,7 +310,7 @@ export default function NotificationsPage() {
             </button>
             <button
               type="button"
-              onClick={() => exportToPdf(filteredLogs, exportColumns, 'notification-logs.pdf', { title: 'Notification Delivery Logs' })}
+              onClick={() => exportToPdf(filteredLogs, exportColumns, 'email-logs.pdf', { title: 'Email Delivery Logs' })}
               className="inline-flex h-8 items-center gap-2 rounded-[3px] border border-[#cbd5e1] bg-white px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-[#0b5a8c]"
             >
               <Download className="h-3.5 w-3.5" />

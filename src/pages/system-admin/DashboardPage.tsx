@@ -77,7 +77,7 @@ export default function DashboardPage() {
           <p className={pageHeadingStyles.pageSubtitle}>Monitor platform operations, storage integrations, security posture, and recent system activity.</p>
         </div>
         <div className="self-start md:self-auto">
-          <NotificationBell notifications={dashboardNotifications} viewAllHref="/system-admin/notifications" />
+          <NotificationBell notifications={dashboardNotifications} viewAllHref="/system-admin/emails" />
         </div>
       </header>
 
@@ -85,7 +85,7 @@ export default function DashboardPage() {
         <MetricCard title="TOTAL PLATFORM RECORDS" value={totals.total} accent="border-[#0b5384]" icon={<Database className="h-4 w-4 text-[#0b5384]" />} />
         <MetricCard title="ACTIVE RECORDS" value={totals.active} accent="border-[#16a34a]" icon={<Activity className="h-4 w-4 text-[#16a34a]" />} />
         <MetricCard title="ACTIVE INTEGRATIONS" value={governanceHealth.activeIntegrations} accent="border-[#0284c7]" icon={<Cloud className="h-4 w-4 text-[#0284c7]" />} />
-        <MetricCard title="FAILED NOTIFICATIONS" value={notificationStats.failed} accent="border-[#dc2626]" icon={<BellRing className="h-4 w-4 text-[#dc2626]" />} />
+        <MetricCard title="FAILED EMAILS" value={notificationStats.failed} accent="border-[#dc2626]" icon={<BellRing className="h-4 w-4 text-[#dc2626]" />} />
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -150,7 +150,7 @@ export default function DashboardPage() {
             <p>MFA: <span className="font-bold">{securitySettings.mfa.enabled ? `Enabled (${securitySettings.mfa.requiredRoles.join(', ')})` : 'Disabled'}</span></p>
             <p>Session Timeout: <span className="font-bold">{securitySettings.session.timeoutMinutes} mins</span></p>
             <p>IP Restrictions: <span className="font-bold">{securitySettings.ipRestrictions.enabled ? 'Enabled' : 'Disabled'}</span></p>
-            <p>Queued Notifications: <span className="font-bold">{notificationStats.queued}</span></p>
+            <p>Queued Emails: <span className="font-bold">{notificationStats.queued}</span></p>
           </div>
         </article>
       </section>
@@ -191,8 +191,8 @@ export default function DashboardPage() {
             <p>Logging Modules Enabled: <span className="font-bold">{governanceHealth.loggingEnabledModules}</span></p>
             <p>Strict Password Policy: <span className="font-bold">{governanceHealth.strictPasswordPolicy ? 'Yes' : 'No'}</span></p>
             <p>Automatic Backup: <span className="font-bold">{governanceHealth.backupEnabled ? 'Enabled' : 'Disabled'}</span></p>
-            <p>Notification Failure Count: <span className="font-bold">{governanceHealth.failedNotifications}</span></p>
-            <p>Total Notification Logs: <span className="font-bold">{notificationStats.total}</span></p>
+            <p>Email Failure Count: <span className="font-bold">{governanceHealth.failedNotifications}</span></p>
+            <p>Total Email Logs: <span className="font-bold">{notificationStats.total}</span></p>
           </div>
         </article>
       </section>

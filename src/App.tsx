@@ -37,6 +37,7 @@ import SystemAdminAgenciesPage from './pages/system-admin/AgenciesPage'
 import SystemAdminServicesPage from './pages/system-admin/ServicesPage'
 import SystemAdminReferralsPage from './pages/system-admin/ReferralsPage'
 import SystemAdminUsersPage from './pages/system-admin/UsersPage'
+import SystemAdminAgencyViewPage from './pages/system-admin/AgencyViewPage'
 import SystemAdminActivityLogsPage from './pages/system-admin/ActivityLogsPage'
 import SystemAdminAuditLoggingPage from './pages/system-admin/AuditLoggingPage'
 import SystemAdminIntegrationsPage from './pages/system-admin/IntegrationsPage'
@@ -95,14 +96,20 @@ export default function App() {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<SystemAdminDashboardPage />} />
           <Route path="cases" element={<SystemAdminCasesPage />} />
+          <Route path="cases/new" element={<NewCasePage />} />
+          <Route path="cases/:caseId" element={<CaseViewPage />} />
           <Route path="clients" element={<SystemAdminClientsPage />} />
+          <Route path="clients/:clientId" element={<ClientDetailsPage />} />
           <Route path="agencies" element={<SystemAdminAgenciesPage />} />
+          <Route path="agencies/:agencyId" element={<SystemAdminAgencyViewPage />} />
           <Route path="services" element={<SystemAdminServicesPage />} />
           <Route path="referrals" element={<SystemAdminReferralsPage />} />
+          <Route path="referrals/:referralId" element={<ReferralViewPage />} />
           <Route path="users" element={<SystemAdminUsersPage />} />
           <Route path="activity-logs" element={<SystemAdminActivityLogsPage />} />
           <Route path="audit-logging" element={<SystemAdminAuditLoggingPage />} />
           <Route path="integrations" element={<SystemAdminIntegrationsPage />} />
+          <Route path="emails" element={<SystemAdminNotificationsPage />} />
           <Route path="notifications" element={<SystemAdminNotificationsPage />} />
           <Route path="security-policies" element={<SystemAdminSecurityPoliciesPage />} />
           <Route path="system-settings" element={<SystemAdminSystemSettingsPage />} />
