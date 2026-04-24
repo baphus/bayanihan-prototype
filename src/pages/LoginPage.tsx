@@ -77,7 +77,7 @@ export default function LoginPage() {
         return;
       }
 
-      setActiveRole(user.role);
+      setActiveRole(user.role, { email: user.email, name: user.name });
 
       if (user?.role === 'System Admin') {
         navigate('/system-admin');
@@ -86,6 +86,11 @@ export default function LoginPage() {
 
       if (user?.role === 'Agency') {
         navigate('/agency');
+        return;
+      }
+
+      if (user?.role === 'OFW') {
+        navigate('/ofw');
         return;
       }
 
@@ -197,6 +202,13 @@ export default function LoginPage() {
                       type="button"
                     >
                       Use Agency
+                    </button>
+                    <button 
+                      onClick={() => applyMockCredentials('ofw@example.com', 'password123')}
+                      className="rounded bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 shadow-sm border border-blue-200 hover:bg-blue-50 transition-colors"
+                      type="button"
+                    >
+                      Use OFW
                     </button>
                   </div>
                 </div>

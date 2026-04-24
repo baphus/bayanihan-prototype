@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Search, ArrowRight, ShieldCheck, Ticket } from 'lucide-react'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
 import FaqSection from '../components/FaqSection'
@@ -24,17 +25,18 @@ export default function TrackYourCasePage() {
     }
 
     setInputError('')
-    navigate(`/track/${encodeURIComponent(normalizedTrackingId)}`)
+    navigate(`/track/${encodeURIComponent(normalizedTrackingId)}/verify`)
   }
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 font-body text-slate-900">
       <AppHeader />
 
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-16">
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-16 bg-gradient-to-b from-slate-50 to-slate-100">
         <div className="w-full max-w-3xl flex flex-col items-center text-center">
           
-          <div className="mb-4 inline-flex items-center gap-2 bg-[#Eef4fb] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#0e5b8d] rounded-sm">
+          <div className="mb-6 inline-flex items-center gap-2 bg-[#Eef4fb] px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#0e5b8d] rounded-full border border-blue-100 shadow-sm">
+            <ShieldCheck className="w-3.5 h-3.5" /> Secure Tracking
           </div>
           
           <h1 className="mb-4 text-4xl sm:text-5xl font-black uppercase text-[#111827] tracking-tight">
@@ -44,23 +46,25 @@ export default function TrackYourCasePage() {
           <p className="mb-10 max-w-xl text-sm sm:text-base text-slate-500">
             Enter your unique case tracking number below to view the
             real-time status and history of your OFW application or
-            request.
+            request across all partner agencies.
           </p>
           
           {/* Main Card */}
-          <div className="w-full bg-white border border-slate-200 border-l-4 border-l-[#0b5c92] shadow-sm p-6 sm:p-10 mb-10 text-left relative">
-            <div className="flex items-center gap-2 mb-4 text-[#0b5c92] font-bold text-xs uppercase tracking-widest">
-              <span className="material-symbols-outlined text-sm">confirmation_number</span>
-              Case Tracking Number
+          <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 sm:p-10 mb-10 text-left relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0b5c92] to-[#00A59B]" />
+            
+            <div className="flex items-center gap-2 mb-6 text-slate-800 font-bold text-sm uppercase tracking-widest">
+              <Ticket className="w-5 h-5 text-[#0b5c92]" />
+              Tracking Details
             </div>
             
             <form onSubmit={handleTrackSubmit}>
-              <div className="relative mb-2">
+              <div className="relative mb-3">
                 <input
                   type="text"
                   placeholder="Enter Tracking ID (e.g., OW-A7K2M9Q)"
                   pattern="OW-[A-Za-z0-9]{7}"
-                  className="w-full bg-slate-50 border border-slate-100 py-4 px-4 pr-12 text-sm focus:outline-none focus:ring-1 focus:ring-[#0b5c92] focus:border-[#0b5c92] text-slate-800"
+                  className="w-full bg-slate-50 rounded-xl border border-slate-200 py-4 pl-5 pr-14 text-base font-medium focus:outline-none focus:ring-2 focus:ring-[#0b5c92] focus:border-[#0b5c92] text-slate-800 transition-shadow placeholder:text-slate-400"
                   value={trackerNumber}
                   onChange={(e) => {
                     setTrackerNumber(e.target.value.toUpperCase())
@@ -71,25 +75,32 @@ export default function TrackYourCasePage() {
                 />
                 <button
                   type="submit"
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0b5c92]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white bg-[#0b5c92] hover:bg-[#084b77] rounded-lg p-2 transition-colors flex items-center justify-center"
                 >
-                  <span className="material-symbols-outlined">search</span>
+                  <Search className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mb-6">
+              
+              <p className="text-xs text-slate-500 mb-8 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[14px]">info</span>
                 Tracking IDs are typically found on your acknowledgment receipt or sent via SMS/Email.
               </p>
 
               {inputError ? (
-                <p className="mb-4 text-[11px] font-semibold text-red-600">{inputError}</p>
+                <div className="mb-6 rounded-lg bg-red-50 p-4 border border-red-100">
+                  <p className="text-sm font-semibold text-red-600 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px]">error</span>
+                    {inputError}
+                  </p>
+                </div>
               ) : null}
               
               <button
                 type="submit"
-                className="w-full bg-[#0b5c92] text-white py-4 font-bold text-sm uppercase tracking-widest hover:bg-[#084b77] transition-colors flex items-center justify-center gap-2"
+                className="w-full rounded-xl bg-[#0b5c92] text-white py-4 font-bold text-sm uppercase tracking-widest hover:bg-[#084b77] transition-colors flex items-center justify-center gap-2 shadow-sm"
               >
                 Track Case Status
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </form>
           </div>

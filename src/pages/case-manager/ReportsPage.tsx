@@ -13,6 +13,9 @@ type ReportCase = {
   caseNo: string
   clientName: string
   agencyName: string
+  regionName: string
+  provinceName: string
+  municipalityName: string
   service: string
   latestUpdate: string
   createdOn: string
@@ -29,10 +32,12 @@ type ReportManagedCase = {
   birthDate: string
   specialCategories: string[]
   agencyName: string
+  regionName: string
   milestone: string
   lastJob?: string
   lastCountry?: string
   provinceName?: string
+  municipalityName: string
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
   createdOn: string
   updatedOn: string
@@ -42,7 +47,9 @@ type ReportManagedClient = {
   id: string
   clientName: string
   clientType: 'Overseas Filipino Worker' | 'Next of Kin'
+  regionName: string
   provinceName?: string
+  municipalityName: string
   totalCases: number
   openCases: number
   closedCases: number
@@ -54,6 +61,12 @@ type ReportExportRow = {
   section: string
   metric: string
   value: string | number
+}
+
+type LocationAddress = {
+  regionName?: string
+  provinceName?: string
+  municipalityName?: string
 }
 
 type TrendGranularity = 'day' | 'week' | 'month' | 'year'
@@ -249,6 +262,53 @@ function formatDisplayDate(isoDate?: string): string {
   })
 }
 
+function normalizeLocationLabel(value?: string): string {
+  return value?.trim() || 'Unknown'
+}
+
+function resolveLocation(address?: LocationAddress): {
+  regionName: string
+  provinceName: string
+  municipalityName: string
+} {
+  return {
+    regionName: normalizeLocationLabel(address?.regionName),
+    provinceName: normalizeLocationLabel(address?.provinceName),
+    municipalityName: normalizeLocationLabel(address?.municipalityName),
+  }
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0 && value !== 'Unknown'),
+    ),
+  ).sort((a, b) => a.localeCompare(b))
+}
+
+function matchesLocationScope(
+  row: { regionName: string; provinceName: string; municipalityName: string },
+  regionFilter: string,
+  provinceFilter: string,
+  municipalityFilter: string,
+): boolean {
+  if (regionFilter !== 'ALL' && row.regionName !== regionFilter) {
+    return false
+  }
+
+  if (provinceFilter !== 'ALL' && row.provinceName !== provinceFilter) {
+    return false
+  }
+
+  if (municipalityFilter !== 'ALL' && row.municipalityName !== municipalityFilter) {
+    return false
+  }
+
+  return true
+}
+
 function getAgeFromBirthDate(birthDateLabel: string, referenceDate: Date): number | null {
   const match = birthDateLabel.match(/(\d{4})$/)
   if (!match) {
@@ -353,6 +413,9 @@ export default function ReportsPage() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'>('ALL')
   const [reportAgencyScope, setReportAgencyScope] = useState('ALL')
   const [agencyFilter, setAgencyFilter] = useState('ALL')
+  const [reportRegionScope, setReportRegionScope] = useState('ALL')
+  const [reportProvinceScope, setReportProvinceScope] = useState('ALL')
+  const [reportMunicipalityScope, setReportMunicipalityScope] = useState('ALL')
   const [casesCurrentPage, setCasesCurrentPage] = useState(1)
   const [casesRowsPerPage, setCasesRowsPerPage] = useState(10)
   const [clientsCurrentPage, setClientsCurrentPage] = useState(1)
@@ -362,17 +425,33 @@ export default function ReportsPage() {
   const [casesChartView, setCasesChartView] = useState<CasesChartView>('line')
   const [casesHoveredIndex, setCasesHoveredIndex] = useState<number | null>(null)
 
-  const reportCases: ReportCase[] = getManagedReferrals().map((item) => ({
-    id: item.id,
-    caseNo: item.caseNo,
-    clientName: item.clientName,
-    agencyName: item.agencyName,
-    service: item.service,
-    latestUpdate: getManagedLatestUpdate(item.id),
-    createdOn: item.createdAt.slice(0, 10),
-    completedOn: item.status === 'COMPLETED' ? item.updatedAt.slice(0, 10) : undefined,
-    status: item.status,
-  }))
+  const managedCases = useMemo(() => getManagedCases(), [])
+  const managedCasesByCaseNo = useMemo(
+    () => new Map(managedCases.map((item) => [item.caseNo, item] as const)),
+    [managedCases],
+  )
+
+  const reportCases: ReportCase[] = getManagedReferrals().map((item) => {
+    const existingProfile = getExistingClientProfile(item.clientName)
+    const persona = getClientPersona(item.caseNo)
+    const managedCase = managedCasesByCaseNo.get(item.caseNo)
+    const location = resolveLocation(managedCase?.ofwProfile?.address || existingProfile.address || persona.ofwAddress)
+
+    return {
+      id: item.id,
+      caseNo: item.caseNo,
+      clientName: item.clientName,
+      agencyName: item.agencyName,
+      regionName: location.regionName,
+      provinceName: location.provinceName,
+      municipalityName: location.municipalityName,
+      service: item.service,
+      latestUpdate: getManagedLatestUpdate(item.id),
+      createdOn: item.createdAt.slice(0, 10),
+      completedOn: item.status === 'COMPLETED' ? item.updatedAt.slice(0, 10) : undefined,
+      status: item.status,
+    }
+  })
 
   const activeFromDate = useMemo(() => toCalendarDate(fromDateISO), [fromDateISO])
   const activeToDate = useMemo(() => toCalendarDate(toDateISO), [toDateISO])
@@ -393,7 +472,18 @@ export default function ReportsPage() {
     }
 
     return dateRangeCases.filter((row) => {
-      const searchable = [row.caseNo, row.clientName, row.agencyName, row.service, row.latestUpdate].join(' ').toLowerCase()
+      const searchable = [
+        row.caseNo,
+        row.clientName,
+        row.agencyName,
+        row.regionName,
+        row.provinceName,
+        row.municipalityName,
+        row.service,
+        row.latestUpdate,
+      ]
+        .join(' ')
+        .toLowerCase()
       return searchable.includes(query)
     })
   }, [dateRangeCases, searchValue])
@@ -404,14 +494,16 @@ export default function ReportsPage() {
         const statusMatch = statusFilter === 'ALL' ? true : row.status === statusFilter
         const agencyScopeMatch = reportAgencyScope === 'ALL' ? true : row.agencyName === reportAgencyScope
         const agencyMatch = agencyFilter === 'ALL' ? true : row.agencyName === agencyFilter
-        return statusMatch && agencyScopeMatch && agencyMatch
+        const locationMatch = matchesLocationScope(row, reportRegionScope, reportProvinceScope, reportMunicipalityScope)
+        return statusMatch && agencyScopeMatch && agencyMatch && locationMatch
       }),
-    [searchedCases, statusFilter, reportAgencyScope, agencyFilter],
+    [searchedCases, statusFilter, reportAgencyScope, agencyFilter, reportRegionScope, reportProvinceScope, reportMunicipalityScope],
   )
 
   const reportManagedCases = useMemo<ReportManagedCase[]>(() => {
-    return getManagedCases().map((item) => {
+    return managedCases.map((item) => {
       const existingProfile = getExistingClientProfile(item.clientName)
+      const location = resolveLocation(item.ofwProfile?.address || existingProfile.address || getClientPersona(item.caseNo).ofwAddress)
 
       return {
         id: item.id,
@@ -422,24 +514,26 @@ export default function ReportsPage() {
         birthDate: item.ofwProfile?.birthDate || existingProfile.birthDate,
         specialCategories: item.ofwProfile?.specialCategories || getSpecialCategories(item.caseNo),
         agencyName: item.agencyName,
+        regionName: location.regionName,
         milestone: item.milestone,
         lastJob: item.workHistory?.lastJob,
         lastCountry: item.workHistory?.lastCountry,
-        provinceName: item.ofwProfile?.address?.provinceName || existingProfile.address.provinceName || 'Unknown',
+        provinceName: location.provinceName,
+        municipalityName: location.municipalityName,
         status: item.status,
         createdOn: item.createdAt.slice(0, 10),
         updatedOn: item.updatedAt.slice(0, 10),
       }
     })
-  }, [])
+  }, [managedCases])
 
   const scopedDateRangeCases = useMemo(() => {
-    if (reportAgencyScope === 'ALL') {
-      return dateRangeCases
-    }
-
-    return dateRangeCases.filter((row) => row.agencyName === reportAgencyScope)
-  }, [dateRangeCases, reportAgencyScope])
+    return dateRangeCases.filter((row) => {
+      const matchesAgency = reportAgencyScope === 'ALL' ? true : row.agencyName === reportAgencyScope
+      const matchesLocation = matchesLocationScope(row, reportRegionScope, reportProvinceScope, reportMunicipalityScope)
+      return matchesAgency && matchesLocation
+    })
+  }, [dateRangeCases, reportAgencyScope, reportRegionScope, reportProvinceScope, reportMunicipalityScope])
 
   const scopedManagedCasesInRange = useMemo(() => {
     return reportManagedCases.filter((row) => {
@@ -450,12 +544,12 @@ export default function ReportsPage() {
       }
 
       if (reportAgencyScope === 'ALL') {
-        return true
+        return matchesLocationScope(row, reportRegionScope, reportProvinceScope, reportMunicipalityScope)
       }
 
-      return row.agencyName === reportAgencyScope
+      return row.agencyName === reportAgencyScope && matchesLocationScope(row, reportRegionScope, reportProvinceScope, reportMunicipalityScope)
     })
-  }, [reportManagedCases, activeFromDate, activeToDate, reportAgencyScope])
+  }, [reportManagedCases, activeFromDate, activeToDate, reportAgencyScope, reportRegionScope, reportProvinceScope, reportMunicipalityScope])
 
   const filteredManagedCases = useMemo(() => {
     return reportManagedCases.filter((row) => {
@@ -467,14 +561,38 @@ export default function ReportsPage() {
       const query = searchValue.trim().toLowerCase()
       const matchesSearch =
         query.length === 0 ||
-        [row.caseNo, row.clientName, row.clientType, row.agencyName, row.milestone].join(' ').toLowerCase().includes(query)
+        [
+          row.caseNo,
+          row.clientName,
+          row.clientType,
+          row.agencyName,
+          row.regionName,
+          row.provinceName,
+          row.municipalityName,
+          row.milestone,
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(query)
       const matchesStatus = statusFilter === 'ALL' ? true : row.status === statusFilter
       const matchesScope = reportAgencyScope === 'ALL' ? true : row.agencyName === reportAgencyScope
       const matchesAgency = agencyFilter === 'ALL' ? true : row.agencyName === agencyFilter
+      const matchesLocation = matchesLocationScope(row, reportRegionScope, reportProvinceScope, reportMunicipalityScope)
 
-      return matchesSearch && matchesStatus && matchesScope && matchesAgency
+      return matchesSearch && matchesStatus && matchesScope && matchesAgency && matchesLocation
     })
-  }, [reportManagedCases, activeFromDate, activeToDate, searchValue, statusFilter, reportAgencyScope, agencyFilter])
+  }, [
+    reportManagedCases,
+    activeFromDate,
+    activeToDate,
+    searchValue,
+    statusFilter,
+    reportAgencyScope,
+    agencyFilter,
+    reportRegionScope,
+    reportProvinceScope,
+    reportMunicipalityScope,
+  ])
 
   const referralsTotalRecords = filteredCases.length
   const referralsTotalPages = Math.max(1, Math.ceil(referralsTotalRecords / referralsRowsPerPage))
@@ -509,7 +627,9 @@ export default function ReportsPage() {
           id: row.clientName,
           clientName: row.clientName,
           clientType: row.clientType,
+          regionName: row.regionName,
           provinceName: row.provinceName,
+          municipalityName: row.municipalityName,
           totalCases: 1,
           openCases: isClosed ? 0 : 1,
           closedCases: isClosed ? 1 : 0,
@@ -528,6 +648,9 @@ export default function ReportsPage() {
       if (rowLatest > existingLatest) {
         existing.latestActivity = row.updatedOn
         existing.primaryAgency = row.agencyName
+        existing.regionName = row.regionName
+        existing.provinceName = row.provinceName
+        existing.municipalityName = row.municipalityName
       }
     })
 
@@ -554,6 +677,11 @@ export default function ReportsPage() {
 
     const closedCases = getManagedCases().filter((item) => {
       if (reportAgencyScope !== 'ALL' && item.agencyName !== reportAgencyScope) {
+        return false
+      }
+
+      const location = resolveLocation(item.ofwProfile?.address || getExistingClientProfile(item.clientName).address || getClientPersona(item.caseNo).ofwAddress)
+      if (!matchesLocationScope(location, reportRegionScope, reportProvinceScope, reportMunicipalityScope)) {
         return false
       }
 
@@ -597,7 +725,7 @@ export default function ReportsPage() {
       averageReferralCompletionRate,
       averageReferralCompletionDays,
     }
-  }, [scopedDateRangeCases, scopedManagedCasesInRange, activeFromDate, activeToDate, reportAgencyScope])
+  }, [scopedDateRangeCases, scopedManagedCasesInRange, activeFromDate, activeToDate, reportAgencyScope, reportRegionScope, reportProvinceScope, reportMunicipalityScope])
 
   const statusBreakdown = useMemo(() => {
     const total = scopedDateRangeCases.length || 1
@@ -626,25 +754,25 @@ export default function ReportsPage() {
     ].filter(item => item.count > 0).map(s => ({ ...s, percent: Math.round((s.count / total) * 100) }))
   }, [scopedManagedCasesInRange])
 
-  const casesByProvinceStats = useMemo(() => {
+  const casesByMunicipalityStats = useMemo(() => {
     const casesInRange = scopedManagedCasesInRange
 
-    const provinceCounts: Record<string, number> = {};
+    const municipalityCounts: Record<string, number> = {}
     const total = casesInRange.length || 1;
 
     casesInRange.forEach((item) => {
-      const province = item.provinceName || 'Unknown';
-      provinceCounts[province] = (provinceCounts[province] || 0) + 1;
-    });
+      const municipality = item.municipalityName || 'Unknown'
+      municipalityCounts[municipality] = (municipalityCounts[municipality] || 0) + 1
+    })
 
-    const colors = ['#0f766e', '#ea580c', '#1e3a8a', '#6d28d9', '#be123c', '#4338ca'];
-    const bgColors = ['bg-teal-700', 'bg-orange-600', 'bg-blue-900', 'bg-violet-700', 'bg-rose-700', 'bg-indigo-700'];
+    const colors = ['#0f766e', '#ea580c', '#1e3a8a', '#6d28d9', '#be123c', '#4338ca']
+    const bgColors = ['bg-teal-700', 'bg-orange-600', 'bg-blue-900', 'bg-violet-700', 'bg-rose-700', 'bg-indigo-700']
 
-    return Object.entries(provinceCounts)
-      .map(([province, count], index) => {
+    return Object.entries(municipalityCounts)
+      .map(([municipality, count], index) => {
         const colorIndex = index % colors.length;
         return {
-          label: province,
+          label: municipality,
           count,
           hex: colors[colorIndex],
           color: bgColors[colorIndex],
@@ -850,12 +978,12 @@ export default function ReportsPage() {
   }, [])
 
   const scopedCaseTrendRows = useMemo(() => {
-    if (reportAgencyScope === 'ALL') {
-      return caseTrendRows
-    }
-
-    return caseTrendRows.filter((row) => row.agencyName === reportAgencyScope)
-  }, [caseTrendRows, reportAgencyScope])
+    return caseTrendRows.filter((row) => {
+      const matchesAgency = reportAgencyScope === 'ALL' ? true : row.agencyName === reportAgencyScope
+      const matchesLocation = matchesLocationScope(row, reportRegionScope, reportProvinceScope, reportMunicipalityScope)
+      return matchesAgency && matchesLocation
+    })
+  }, [caseTrendRows, reportAgencyScope, reportRegionScope, reportProvinceScope, reportMunicipalityScope])
 
   const casesTrendData = useMemo(
     () => buildTrendData(activeFromDate, activeToDate, scopedCaseTrendRows),
@@ -940,6 +1068,36 @@ export default function ReportsPage() {
     return Array.from(new Set(reportCases.map((row) => row.agencyName))).sort((a, b) => a.localeCompare(b))
   }, [])
 
+  const locationRegions = useMemo(() => uniqueSorted(reportManagedCases.map((row) => row.regionName)), [reportManagedCases])
+
+  const locationProvinces = useMemo(() => {
+    return uniqueSorted(
+      reportManagedCases
+        .filter((row) => (reportRegionScope === 'ALL' ? true : row.regionName === reportRegionScope))
+        .map((row) => row.provinceName || 'Unknown'),
+    )
+  }, [reportManagedCases, reportRegionScope])
+
+  const locationMunicipalities = useMemo(() => {
+    return uniqueSorted(
+      reportManagedCases
+        .filter((row) => (reportRegionScope === 'ALL' ? true : row.regionName === reportRegionScope))
+        .filter((row) => (reportProvinceScope === 'ALL' ? true : row.provinceName === reportProvinceScope))
+        .map((row) => row.municipalityName || 'Unknown'),
+    )
+  }, [reportManagedCases, reportRegionScope, reportProvinceScope])
+
+  const setRegionScope = (nextRegion: string) => {
+    setReportRegionScope(nextRegion)
+    setReportProvinceScope('ALL')
+    setReportMunicipalityScope('ALL')
+  }
+
+  const setProvinceScope = (nextProvince: string) => {
+    setReportProvinceScope(nextProvince)
+    setReportMunicipalityScope('ALL')
+  }
+
   const activeFilters: FilterChip[] = useMemo(() => {
     const filters: FilterChip[] = []
 
@@ -951,16 +1109,34 @@ export default function ReportsPage() {
       filters.push({ key: 'agency', label: 'Agency', value: agencyFilter })
     }
 
+    if (reportRegionScope !== 'ALL') {
+      filters.push({ key: 'region', label: 'Region', value: reportRegionScope })
+    }
+
+    if (reportProvinceScope !== 'ALL') {
+      filters.push({ key: 'province', label: 'Province', value: reportProvinceScope })
+    }
+
+    if (reportMunicipalityScope !== 'ALL') {
+      filters.push({ key: 'municipality', label: 'Municipality', value: reportMunicipalityScope })
+    }
+
     return filters
-  }, [statusFilter, agencyFilter])
+  }, [statusFilter, agencyFilter, reportRegionScope, reportProvinceScope, reportMunicipalityScope])
 
   const reportExportRows = useMemo<ReportExportRow[]>(() => {
     const reportScopeLabel = reportAgencyScope === 'ALL' ? 'All Agencies' : reportAgencyScope
     const periodLabel = `${formatDisplayDate(fromDateISO)} - ${formatDisplayDate(toDateISO)}`
+    const regionLabel = reportRegionScope === 'ALL' ? 'All Regions' : reportRegionScope
+    const provinceLabel = reportProvinceScope === 'ALL' ? 'All Provinces' : reportProvinceScope
+    const municipalityLabel = reportMunicipalityScope === 'ALL' ? 'All Municipalities' : reportMunicipalityScope
 
     const rows: ReportExportRow[] = [
       { section: 'Report Metadata', metric: 'Report Scope Agency', value: reportScopeLabel },
       { section: 'Report Metadata', metric: 'Date Range', value: periodLabel },
+      { section: 'Report Metadata', metric: 'Region Filter', value: regionLabel },
+      { section: 'Report Metadata', metric: 'Province Filter', value: provinceLabel },
+      { section: 'Report Metadata', metric: 'Municipality Filter', value: municipalityLabel },
       { section: 'Report Metadata', metric: 'Status Filter', value: statusFilter },
       { section: 'Report Metadata', metric: 'Agency Filter', value: agencyFilter },
       { section: 'Report Metadata', metric: 'Search Query', value: searchValue.trim() || 'None' },
@@ -982,6 +1158,10 @@ export default function ReportsPage() {
 
     agencyStats.forEach((item) => {
       rows.push({ section: 'Referrals by Agency', metric: item.label, value: `${item.count} (${item.percent}%)` })
+    })
+
+    casesByMunicipalityStats.forEach((item) => {
+      rows.push({ section: 'Cases by Municipality', metric: item.label, value: `${item.count} (${item.percent}%)` })
     })
 
     serviceStats.forEach((item) => {
@@ -1015,8 +1195,12 @@ export default function ReportsPage() {
     kpiData,
     statusBreakdown,
     agencyStats,
+    casesByMunicipalityStats,
     serviceStats,
     demographicStats,
+    reportRegionScope,
+    reportProvinceScope,
+    reportMunicipalityScope,
   ])
 
   const reportExportColumns: ExportColumn<ReportExportRow>[] = [
@@ -1026,7 +1210,13 @@ export default function ReportsPage() {
   ]
 
   const handleExportReportSummary = () => {
-    const scopeSlug = (reportAgencyScope === 'ALL' ? 'all-agencies' : reportAgencyScope)
+    const scopeSlug = [
+      reportAgencyScope === 'ALL' ? 'all-agencies' : reportAgencyScope,
+      reportRegionScope === 'ALL' ? 'all-regions' : reportRegionScope,
+      reportProvinceScope === 'ALL' ? 'all-provinces' : reportProvinceScope,
+      reportMunicipalityScope === 'ALL' ? 'all-municipalities' : reportMunicipalityScope,
+    ]
+      .join('-')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
@@ -1040,6 +1230,9 @@ export default function ReportsPage() {
     setQuickRange('CUSTOM')
     setStatusFilter('ALL')
     setAgencyFilter('ALL')
+    setReportRegionScope('ALL')
+    setReportProvinceScope('ALL')
+    setReportMunicipalityScope('ALL')
     setSearchValue('')
   }
 
@@ -1070,6 +1263,11 @@ export default function ReportsPage() {
       key: 'agencyName',
       title: 'AGENCY',
       render: (row) => <span className="text-[12px] text-slate-700">{row.agencyName}</span>,
+    },
+    {
+      key: 'municipalityName',
+      title: 'MUNICIPALITY/CITY',
+      render: (row) => <span className="text-[12px] text-slate-700">{row.municipalityName}</span>,
     },
     {
       key: 'service',
@@ -1159,6 +1357,11 @@ export default function ReportsPage() {
       key: 'provinceName',
       title: 'PROVINCE',
       render: (row) => <span className="text-[12px] text-slate-700">{row.provinceName || 'Unknown'}</span>,
+    },
+    {
+      key: 'municipalityName',
+      title: 'MUNICIPALITY/CITY',
+      render: (row) => <span className="text-[12px] text-slate-700">{row.municipalityName || 'Unknown'}</span>,
     },
     {
       key: 'totalCases',
@@ -1340,12 +1543,12 @@ export default function ReportsPage() {
         </article>
 
         <article className="border border-[#cbd5e1] bg-white p-4">
-          <h3 className="mb-4 text-[14px] font-bold text-blue-900">Cases By Province</h3>
+          <h3 className="mb-4 text-[14px] font-bold text-blue-900">Cases By Municipality</h3>
           <div className="flex items-center justify-center">
-            <PieChart data={casesByProvinceStats} className="w-32 h-32" />
+            <PieChart data={casesByMunicipalityStats} className="w-32 h-32" />
           </div>
           <div className="mt-4 space-y-2">
-            {casesByProvinceStats.map((item) => (
+            {casesByMunicipalityStats.map((item) => (
               <div key={item.label} className="flex items-center justify-between text-[12px]">
                 <span className="inline-flex items-center gap-2 text-slate-600">
                   <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${item.color}`} />
@@ -1807,7 +2010,7 @@ export default function ReportsPage() {
           data={paginatedReferrals}
           columns={columns}
           keyExtractor={(row) => row.id}
-          searchPlaceholder="Search case no, client, agency, service..."
+          searchPlaceholder="Search case no, client, agency, service, or location..."
           searchValue={searchValue}
           onSearchChange={setSearchValue}
           onAdvancedFilters={() => setIsFilterOpen((prev) => !prev)}
@@ -1854,6 +2057,55 @@ export default function ReportsPage() {
                   ))}
                 </select>
               </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Region</label>
+                  <select
+                    value={reportRegionScope}
+                    onChange={(event) => setRegionScope(event.target.value)}
+                    className="h-10 w-full border border-[#cbd5e1] px-3 text-[13px] font-semibold text-slate-700 outline-none"
+                  >
+                    <option value="ALL">All regions</option>
+                    {locationRegions.map((region) => (
+                      <option key={region} value={region}>
+                        {region}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Province</label>
+                  <select
+                    value={reportProvinceScope}
+                    onChange={(event) => setProvinceScope(event.target.value)}
+                    disabled={reportRegionScope === 'ALL'}
+                    className="h-10 w-full border border-[#cbd5e1] px-3 text-[13px] font-semibold text-slate-700 outline-none disabled:bg-slate-50"
+                  >
+                    <option value="ALL">All provinces</option>
+                    {locationProvinces.map((province) => (
+                      <option key={province} value={province}>
+                        {province}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Municipality</label>
+                  <select
+                    value={reportMunicipalityScope}
+                    onChange={(event) => setReportMunicipalityScope(event.target.value)}
+                    disabled={reportProvinceScope === 'ALL'}
+                    className="h-10 w-full border border-[#cbd5e1] px-3 text-[13px] font-semibold text-slate-700 outline-none disabled:bg-slate-50"
+                  >
+                    <option value="ALL">All municipalities</option>
+                    {locationMunicipalities.map((municipality) => (
+                      <option key={municipality} value={municipality}>
+                        {municipality}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           }
           activeFilters={activeFilters}
@@ -1865,11 +2117,27 @@ export default function ReportsPage() {
 
             if (filter.key === 'agency') {
               setAgencyFilter('ALL')
+              return
+            }
+
+            if (filter.key === 'region') {
+              setRegionScope('ALL')
+              return
+            }
+
+            if (filter.key === 'province') {
+              setProvinceScope('ALL')
+              return
+            }
+
+            if (filter.key === 'municipality') {
+              setReportMunicipalityScope('ALL')
             }
           }}
           onClearFilters={() => {
             setStatusFilter('ALL')
             setAgencyFilter('ALL')
+            setRegionScope('ALL')
           }}
           totalRecords={referralsTotalRecords}
           startIndex={referralsStartIndex}

@@ -1,17 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { JSX, ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass } from './statusBadgeStyles'
 import { getCaseNarrativeBySeed } from '../../data/unifiedData'
 import { getCaseAgency } from '../../data/unifiedData'
-import { formatAddressParts, getAgencyFocalByAgencyId, getClientPersona, getSpecialCategories, type AddressParts } from '../../data/unifiedData'
+import { formatAddressParts, getAgencyFocalByAgencyId, getClientPersona, getSpecialCategories, type AddressParts, type CaseManagerReferral, type CaseManagerReferralNote } from '../../data/unifiedData'
+import ReferralNotesCarousel from '../../components/ui/ReferralNotesCarousel'
 import {
   addManagedReferralMilestone,
   getManagedCaseById,
   getManagedLatestMilestone,
   getManagedReferralById,
   getManagedReferralMilestones,
+  updateManagedReferral,
   updateManagedReferralStatus,
 } from '../../data/caseLifecycleStore'
 
@@ -58,6 +60,7 @@ type TimelineItem = {
 
 const CURRENT_USER_ROLE: UserRole = 'Agency Focal'
 const BAYANIHAN_LOGO = '/logo.png'
+const CASE_MANAGER_ACTOR = 'Case Manager - Marychris M. Relon'
 
 function getAgencyActorLabel(agencyId: string): string {
   const focal = getAgencyFocalByAgencyId(agencyId)
@@ -66,12 +69,6 @@ function getAgencyActorLabel(agencyId: string): string {
 
 function isAcceptedStatus(status: CaseStatus): boolean {
   return status === 'PROCESSING' || status === 'COMPLETED'
-}
-
-type CaseDocument = {
-  name: string
-  meta: string
-  color: string
 }
 
 function formatIsoToDisplayDate(iso: string): string {
@@ -119,12 +116,58 @@ function buildDetailCase(referralId: string): DetailCase | null {
   }
 }
 
-function buildDocuments(caseData: DetailCase): CaseDocument[] {
+function buildFallbackNotesHistory(referral: CaseManagerReferral): CaseManagerReferralNote[] {
+  const source = referral.notes.trim() || referral.remarks.trim()
+  if (!source) {
+    return []
+  }
+
+  return [
+    {
+      id: `${referral.id}-legacy-note`,
+      content: source,
+      createdAt: referral.updatedAt || referral.createdAt,
+      createdBy: CASE_MANAGER_ACTOR,
+    },
+  ]
+}
+
+function getReferralNotesHistory(referral: CaseManagerReferral | null): CaseManagerReferralNote[] {
+  if (!referral) {
+    return []
+  }
+
+  const normalized = (referral.noteHistory?.length ? referral.noteHistory : buildFallbackNotesHistory(referral)).map((note) => ({
+    ...note,
+    content: note.content.trim(),
+  }))
+
+  return normalized
+    .filter((note) => note.content.length > 0)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+}
+
+function buildFallbackDocuments(caseData: DetailCase): CaseManagerReferral['documents'] {
   const serviceKey = caseData.service.toLowerCase().replace(/[^a-z]/g, '_')
   return [
-    { name: `${serviceKey}_request_form_${caseData.caseNo}.pdf`, meta: 'Marychris M. Relon - Case Manager', color: 'text-red-600 bg-red-50' },
-    { name: `client_id_${caseData.caseNo}.jpg`, meta: 'Marychris M. Relon - Case Manager', color: 'text-blue-600 bg-blue-50' },
-    { name: `supporting_docs_${caseData.caseNo}.zip`, meta: 'Marychris M. Relon - Case Manager', color: 'text-amber-600 bg-amber-50' },
+    {
+      id: `fallback-${caseData.id}-1`,
+      name: `${serviceKey}_request_form_${caseData.caseNo}.pdf`,
+      uploadedBy: 'Case Manager - Marychris M. Relon',
+      uploadedAt: new Date().toISOString(),
+    },
+    {
+      id: `fallback-${caseData.id}-2`,
+      name: `client_id_${caseData.caseNo}.jpg`,
+      uploadedBy: 'Case Manager - Marychris M. Relon',
+      uploadedAt: new Date().toISOString(),
+    },
+    {
+      id: `fallback-${caseData.id}-3`,
+      name: `supporting_docs_${caseData.caseNo}.zip`,
+      uploadedBy: 'Case Manager - Marychris M. Relon',
+      uploadedAt: new Date().toISOString(),
+    },
   ]
 }
 
@@ -208,8 +251,13 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const { caseId } = useParams<{ caseId: string }>()
   const [refreshKey, setRefreshKey] = useState(0)
   const [renderKey, setRenderKey] = useState(0)
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   
   const selectedCase = caseId ? buildDetailCase(caseId) : null
+  const selectedReferral = caseId ? getManagedReferralById(caseId) ?? null : null
+  const notesHistory = getReferralNotesHistory(selectedReferral)
+  const mostRecentCaseManagerNote = notesHistory.find((note) => note.createdBy.includes('Case Manager'))
+  const latestNoteText = notesHistory[0]?.content ?? ''
 
   const [currentStatus, setCurrentStatus] = useState<CaseStatus>('PENDING')
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -224,12 +272,39 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false)
   const [nextStatus, setNextStatus] = useState<CaseStatus>('PROCESSING')
   const [statusRemark, setStatusRemark] = useState('')
+  const [isAddNoteOpen, setIsAddNoteOpen] = useState(false)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [pendingNote, setPendingNote] = useState<string | null>(null)
+  const [pendingReplacements, setPendingReplacements] = useState<Record<string, File>>({})
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
+  const [activeVersionGroupId, setActiveVersionGroupId] = useState<string | null>(null)
+  const [saveMessage, setSaveMessage] = useState('')
 
-  const documents = selectedCase ? buildDocuments(selectedCase) : []
+  const documents = selectedReferral?.documents?.length
+    ? selectedReferral.documents
+    : selectedCase
+      ? buildFallbackDocuments(selectedCase)
+      : []
+  const activeDocuments = documents.filter((doc) => !doc.archived)
+  const documentVersionRows = activeVersionGroupId
+    ? documents
+        .filter((doc) => (doc.versionGroupId ?? doc.id) === activeVersionGroupId)
+        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+    : []
   const selectedAgency = selectedCase ? getCaseAgency(selectedCase.id) : null
   const agencyName = selectedAgency?.name ?? 'Agency'
   const agencyLogoSrc = selectedAgency?.logoUrl ?? BAYANIHAN_LOGO
+  const agencyActor = selectedCase ? getAgencyActorLabel(selectedCase.agencyId) : 'Agency Focal'
   const canAddMilestone = isAcceptedStatus(currentStatus) && CURRENT_USER_ROLE === 'Agency Focal'
+  const pendingNoteValue = pendingNote?.trim() ?? ''
+  const hasPendingChanges = Boolean(pendingNoteValue) || Object.keys(pendingReplacements).length > 0
+  const pendingChangeSummary = [
+    pendingNoteValue ? `Add note: "${pendingNoteValue.slice(0, 90)}${pendingNoteValue.length > 90 ? '...' : ''}"` : null,
+    ...Object.entries(pendingReplacements).map(([docId, file]) => {
+      const target = activeDocuments.find((item) => item.id === docId)
+      return `Replace document: ${target?.name ?? 'Unknown document'} -> ${file.name}`
+    }),
+  ].filter((item): item is string => Boolean(item))
 
   // Force state reset when caseId changes - use explicit dependency on caseId
   useEffect(() => {
@@ -242,9 +317,20 @@ export default function ReferredCaseViewPage(): JSX.Element {
     setMilestoneDescription('')
     setIsUpdateStatusModalOpen(false)
     setStatusRemark('')
+    setIsAddNoteOpen(false)
+    setNoteDraft('')
+    setPendingNote(null)
+    setPendingReplacements({})
+    setIsConfirmModalOpen(false)
+    setActiveVersionGroupId(null)
+    setSaveMessage('')
     setRefreshKey(0)
     setRenderKey((prev) => prev + 1) // Force a re-render
   }, [caseId])
+
+  useEffect(() => {
+    setNoteDraft(latestNoteText)
+  }, [latestNoteText, caseId])
 
   // Load case data fresh whenever caseId changes
   useEffect(() => {
@@ -429,12 +515,6 @@ export default function ReferredCaseViewPage(): JSX.Element {
               ) : null}
             </div>
           </SectionCard>
-
-          <SectionCard title="NOTES">
-            <div className="border border-[#d8dee8] bg-[#f8fafc] px-4 py-3 text-[13px] leading-6 text-slate-600">
-              Lorem ipsum dolor sit amet consectetur adipiscing elit Ut et massa mi. Aliquam in hendrerit urna. Pellentesque sit amet sapien fringilla, mattis ligula consectetur, ultrices mauris. Maecenas vitae mattis tellus. Nullam quis imperdiet augue. Vestibulum auctor ornare leo, non suscipit magna interdum eu. Curabitur pellentesque nibh nibh, at maximus ante fermentum sit amet. Pellentesque commodo lacus at sodales sodales.
-            </div>
-          </SectionCard>
         </main>
 
         <aside className="xl:col-span-4 space-y-4">
@@ -498,26 +578,249 @@ export default function ReferredCaseViewPage(): JSX.Element {
             </div>
           </SideCard>
 
+          <section className="bg-white border border-[#d8dee8] rounded-[2px] p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#334155]`}>REFERRAL NOTES</h3>
+              <button
+                type="button"
+                onClick={() => setIsAddNoteOpen((prev) => !prev)}
+                className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
+              >
+                Add Note
+              </button>
+            </div>
+            <div className="aspect-square border border-[#d8dee8] bg-[#f8fafc] p-3 overflow-y-auto">
+              {isAddNoteOpen ? (
+                <div className="mb-3 space-y-2 border border-[#d8dee8] bg-white p-3">
+                  <textarea
+                    value={noteDraft}
+                    onChange={(event) => setNoteDraft(event.target.value)}
+                    rows={3}
+                    className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[12px] text-slate-700 outline-none focus:border-[#0b5384]"
+                    placeholder="Write a referral note"
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddNoteOpen(false)
+                        setNoteDraft(latestNoteText)
+                      }}
+                      className="h-[28px] px-3 border border-[#cbd5e1] bg-white text-slate-700 text-[10px] font-bold rounded-[2px] hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = noteDraft.trim()
+                        if (!trimmed || trimmed === latestNoteText.trim()) {
+                          return
+                        }
+                        setPendingNote(trimmed)
+                        setIsAddNoteOpen(false)
+                      }}
+                      className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
+                    >
+                      Queue Note
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {pendingNoteValue ? (
+                <div className="mb-3 rounded-[2px] border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending Note</p>
+                  <p className="mt-1 text-[11px] text-amber-900">{pendingNoteValue}</p>
+                </div>
+              ) : null}
+
+              <ReferralNotesCarousel notes={notesHistory} mostRecentCaseManagerNoteId={mostRecentCaseManagerNote?.id} />
+            </div>
+          </section>
+
           <SideCard title="DOCUMENTS">
             <div className="space-y-2">
-              {documents.map((doc) => (
-                <div key={doc.name} className="bg-[#f5f7fb] border border-[#e2e8f0] p-3 flex items-center justify-between gap-3">
+              {activeDocuments.map((doc) => (
+                <div key={doc.id} className="bg-[#f5f7fb] border border-[#e2e8f0] p-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className={`w-6 h-6 rounded-[2px] ${doc.color} flex items-center justify-center text-[10px] font-black`}>
+                    <div className="w-6 h-6 rounded-[2px] bg-slate-100 text-slate-700 flex items-center justify-center text-[10px] font-black">
                       <span>F</span>
                     </div>
                     <div className="min-w-0">
                       <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
-                      <p className="text-[9px] text-slate-400 truncate">{doc.meta}</p>
+                      <p className="text-[9px] text-slate-400 truncate">{doc.uploadedBy} • {formatIsoToDisplayDate(doc.uploadedAt)}</p>
+                      {pendingReplacements[doc.id] ? (
+                        <p className="mt-1 text-[10px] font-semibold text-amber-700">Pending replacement: {pendingReplacements[doc.id].name}</p>
+                      ) : null}
                     </div>
                   </div>
-                  <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
+                  <div className="flex items-center gap-2">
+                    <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveVersionGroupId(doc.versionGroupId ?? doc.id)}
+                      className="text-[10px] text-slate-600 font-bold hover:underline"
+                    >
+                      View Versions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRefs.current[doc.id]?.click()}
+                      className="text-[10px] text-[#0b5384] font-bold hover:underline"
+                    >
+                      Replace Document
+                    </button>
+                    <input
+                      ref={(element) => {
+                        fileInputRefs.current[doc.id] = element
+                      }}
+                      data-doc-id={doc.id}
+                      type="file"
+                      onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                        const targetId = event.target.dataset.docId
+                        const file = event.target.files?.[0]
+                        if (!targetId || !file) {
+                          return
+                        }
+
+                        setPendingReplacements((prev) => ({
+                          ...prev,
+                          [targetId]: file,
+                        }))
+                        event.target.value = ''
+                      }}
+                      className="hidden"
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           </SideCard>
         </aside>
       </div>
+
+      {saveMessage ? <p className="text-[11px] font-semibold text-[#0b5384]">{saveMessage}</p> : null}
+
+      {hasPendingChanges ? (
+        <button
+          type="button"
+          onClick={() => setIsConfirmModalOpen(true)}
+          className="fixed bottom-6 right-6 z-40 h-[38px] px-4 bg-[#0b5384] text-white text-[11px] font-bold rounded-[3px] border border-[#0b5384] shadow-lg hover:bg-[#09416a]"
+        >
+          Review Pending Changes
+        </button>
+      ) : null}
+
+      {isConfirmModalOpen ? (
+        <ChangeReviewModal
+          changes={pendingChangeSummary}
+          onClose={() => setIsConfirmModalOpen(false)}
+          onDiscard={() => {
+            setPendingNote(null)
+            setPendingReplacements({})
+            setIsConfirmModalOpen(false)
+            setNoteDraft(latestNoteText)
+          }}
+          onSave={() => {
+            if (!selectedReferral) {
+              return
+            }
+
+            const nowIso = new Date().toISOString()
+            const nextTimeline = [...timeline]
+
+            if (pendingNoteValue) {
+              nextTimeline.push({
+                id: `${selectedReferral.id}-agency-note-${Date.now()}`,
+                agency: agencyName,
+                title: 'Referral Note Added',
+                description: 'A referral note was added by Agency Focal.',
+                time: nowLabel(),
+                actor: agencyActor,
+                logoSrc: agencyLogoSrc,
+              })
+            }
+
+            if (Object.keys(pendingReplacements).length > 0) {
+              nextTimeline.push({
+                id: `${selectedReferral.id}-agency-docs-${Date.now()}`,
+                agency: agencyName,
+                title: 'Referral Documents Replaced',
+                description: `${Object.keys(pendingReplacements).length} document${Object.keys(pendingReplacements).length > 1 ? 's were' : ' was'} replaced by Agency Focal.`,
+                time: nowLabel(),
+                actor: agencyActor,
+                logoSrc: agencyLogoSrc,
+              })
+            }
+
+            updateManagedReferral(selectedReferral.id, (current) => {
+              const nextNoteHistory = pendingNoteValue
+                ? [
+                    ...(current.noteHistory?.length ? current.noteHistory : buildFallbackNotesHistory(current)),
+                    {
+                      id: `note-${current.id}-${Date.now()}`,
+                      content: pendingNoteValue,
+                      createdAt: nowIso,
+                      createdBy: agencyActor,
+                    },
+                  ]
+                : current.noteHistory
+
+              const nextDocuments = [...(current.documents ?? [])]
+              Object.entries(pendingReplacements).forEach(([docId, file], index) => {
+                const targetIndex = nextDocuments.findIndex((doc) => doc.id === docId)
+                if (targetIndex < 0) {
+                  return
+                }
+
+                const target = nextDocuments[targetIndex]
+                const versionGroupId = target.versionGroupId ?? target.id
+                const replacementId = `doc-${current.id}-agency-replacement-${Date.now()}-${index}`
+
+                nextDocuments[targetIndex] = {
+                  ...target,
+                  archived: true,
+                  replacedById: replacementId,
+                  versionGroupId,
+                }
+
+                nextDocuments.push({
+                  id: replacementId,
+                  name: file.name,
+                  uploadedBy: agencyActor,
+                  uploadedAt: nowIso,
+                  replacesId: target.id,
+                  versionGroupId,
+                })
+              })
+
+              return {
+                ...current,
+                notes: pendingNoteValue || current.notes,
+                noteHistory: nextNoteHistory,
+                documents: nextDocuments,
+                updatedAt: nowIso,
+              }
+            })
+
+            setTimeline(nextTimeline)
+            setPendingNote(null)
+            setPendingReplacements({})
+            setIsConfirmModalOpen(false)
+            setNoteDraft('')
+            setRefreshKey((prev) => prev + 1)
+            setSaveMessage(`Saved ${nowLabel()}.`)
+          }}
+        />
+      ) : null}
+
+      {activeVersionGroupId ? (
+        <DocumentVersionsModal
+          documents={documentVersionRows}
+          onClose={() => setActiveVersionGroupId(null)}
+        />
+      ) : null}
 
       {pendingDecision ? (
         <DecisionModal
@@ -602,6 +905,98 @@ export default function ReferredCaseViewPage(): JSX.Element {
           }}
         />
       ) : null}
+    </div>
+  )
+}
+
+function ChangeReviewModal({
+  changes,
+  onClose,
+  onDiscard,
+  onSave,
+}: {
+  changes: string[]
+  onClose: () => void
+  onDiscard: () => void
+  onSave: () => void
+}): JSX.Element {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="w-full max-w-lg rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
+        <div className="border-b border-[#e2e8f0] px-5 py-4">
+          <h2 className="text-[16px] font-extrabold text-slate-900">Confirm Referral Changes</h2>
+          <p className="mt-1 text-[12px] text-slate-500">Review what will be saved to notes and documents.</p>
+        </div>
+
+        <div className="max-h-[260px] space-y-2 overflow-y-auto px-5 py-4">
+          {changes.length ? (
+            changes.map((change) => (
+              <p key={change} className="text-[12px] text-slate-700">• {change}</p>
+            ))
+          ) : (
+            <p className="text-[12px] text-slate-500">No pending changes.</p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-[#e2e8f0] px-5 py-3">
+          <button
+            onClick={onClose}
+            className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
+          >
+            Back
+          </button>
+          <button
+            onClick={onDiscard}
+            className="h-9 rounded-[3px] border border-red-200 bg-red-50 px-3 text-[12px] font-bold text-red-700"
+          >
+            Discard
+          </button>
+          <button
+            onClick={onSave}
+            className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DocumentVersionsModal({
+  documents,
+  onClose,
+}: {
+  documents: CaseManagerReferral['documents']
+  onClose: () => void
+}): JSX.Element {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="w-full max-w-xl rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#e2e8f0] px-5 py-4">
+          <h2 className="text-[16px] font-extrabold text-slate-900">Document Versions</h2>
+          <button
+            onClick={onClose}
+            className="h-8 rounded-[3px] border border-[#cbd5e1] px-3 text-[11px] font-bold text-slate-700"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="max-h-[300px] space-y-2 overflow-y-auto px-5 py-4">
+          {documents.map((doc) => (
+            <div key={doc.id} className="flex items-center justify-between gap-2 border border-[#e2e8f0] bg-[#f8fafc] p-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
+                <p className="text-[10px] text-slate-500">
+                  {formatIsoToDisplayDate(doc.uploadedAt)} • {doc.uploadedBy} • {doc.archived ? 'Archived' : 'Current'}
+                </p>
+              </div>
+              <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

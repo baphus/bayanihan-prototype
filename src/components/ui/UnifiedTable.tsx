@@ -234,7 +234,11 @@ export function UnifiedTable<T>({
               </tbody>
             </table>
             {data.length === 0 && (
-               <div className="p-8 text-center text-slate-500 text-[14px] font-medium">No records found.</div>
+               <div className="flex flex-col items-center justify-center p-12 text-center">
+                 <span className="material-symbols-outlined mb-3 text-4xl text-slate-300">inbox</span>
+                 <p className="text-[14px] font-bold text-slate-700">No records found</p>
+                 <p className="mt-1 max-w-sm text-xs text-slate-500">We couldn't find any records matching your current criteria. Try adjusting your filters or search term.</p>
+               </div>
             )}
           </div>
         ) : (
@@ -263,7 +267,11 @@ export function UnifiedTable<T>({
               ))}
             </div>
             {data.length === 0 && (
-               <div className="p-8 text-center text-slate-500 text-[14px] font-medium">No records found.</div>
+               <div className="flex flex-col items-center justify-center p-12 text-center">
+                 <span className="material-symbols-outlined mb-3 text-4xl text-slate-300">inbox</span>
+                 <p className="text-[14px] font-bold text-slate-700">No records found</p>
+                 <p className="mt-1 max-w-sm text-xs text-slate-500">We couldn't find any records matching your current criteria. Try adjusting your filters or search term.</p>
+               </div>
             )}
           </div>
         )}

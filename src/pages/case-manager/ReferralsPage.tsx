@@ -1,57 +1,27 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
+import AppToast from '../../components/ui/AppToast'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
-import {
-  formatDisplayDateTime,
-  getCaseManagerAgencies,
-  getCaseNarrativeBySeed,
-  getStakeholderServiceDetails,
-  getStakeholderServices,
-  resolveStakeholderService,
-  toCaseHealthStatus,
-  type CaseManagerReferral,
-} from '../../data/unifiedData'
-import { createManagedReferral, getManagedCases, getManagedLatestMilestone, getManagedReferrals } from '../../data/caseLifecycleStore'
+import { formatDisplayDateTime, type CaseManagerReferral } from '../../data/unifiedData'
+import { getManagedLatestMilestone, getManagedReferrals } from '../../data/caseLifecycleStore'
 
 type StatusFilter = 'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+type ReferralsPageState = {
+  toastMessage?: string
+}
 
 export default function ReferralsPage() {
   const navigate = useNavigate()
-  const [refreshKey, setRefreshKey] = useState(0)
-  const agencies = useMemo(() => getCaseManagerAgencies(), [])
-  const openCases = useMemo(
-    () => getManagedCases().filter((item) => toCaseHealthStatus(item.status) === 'OPEN'),
-    [refreshKey],
-  )
-  const initialCase = openCases[0]
-  const initialAgencyId = initialCase?.agencyId ?? agencies[0]?.id ?? ''
-  const rows = useMemo<CaseManagerReferral[]>(() => getManagedReferrals(), [refreshKey])
+  const location = useLocation()
+  const routeState = (location.state ?? {}) as ReferralsPageState
+  const rows = useMemo<CaseManagerReferral[]>(() => getManagedReferrals(), [])
+
   const [searchValue, setSearchValue] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [createStep, setCreateStep] = useState<1 | 2 | 3>(1)
-
-  const [selectedCaseId, setSelectedCaseId] = useState(initialCase?.id ?? '')
-  const [selectedAgencyId, setSelectedAgencyId] = useState(initialAgencyId)
-  const [serviceValue, setServiceValue] = useState(resolveStakeholderService(initialAgencyId, initialCase?.service))
-  const [remarksValue, setRemarksValue] = useState('')
-  const [notesValue, setNotesValue] = useState('')
-  const [uploadedDocuments, setUploadedDocuments] = useState<File[]>([])
-
-  const availableServices = useMemo(() => getStakeholderServices(selectedAgencyId), [selectedAgencyId])
-  const selectedServiceDetail = useMemo(() => {
-    if (!selectedAgencyId || !serviceValue.trim()) {
-      return undefined
-    }
-
-    return getStakeholderServiceDetails(selectedAgencyId).find((service) => service.title === serviceValue)
-  }, [selectedAgencyId, serviceValue])
-  const selectedServiceRequirements = useMemo(() => {
-    return selectedServiceDetail?.requiredDocuments ?? []
-  }, [selectedServiceDetail])
+  const [toastMessage, setToastMessage] = useState(routeState.toastMessage ?? '')
 
   const filteredRows = useMemo(() => {
     const query = searchValue.trim().toLowerCase()
@@ -153,103 +123,12 @@ export default function ReferralsPage() {
     },
   ]
 
-  const selectedCase = openCases.find((item) => item.id === selectedCaseId)
-  const selectedAgency = agencies.find((item) => item.id === selectedAgencyId)
-  const canCreate = Boolean(
-    selectedCaseId &&
-    selectedAgencyId &&
-    serviceValue.trim().length > 0 &&
-    availableServices.includes(serviceValue),
-  )
-
-  const isStepOneValid = Boolean(selectedCase)
-  const isStepTwoValid = Boolean(selectedAgencyId)
-  const isStepThreeValid = canCreate
-
-  const openCreateWizard = () => {
-    setCreateStep(1)
-    setIsCreateOpen(true)
-  }
-
-  const closeCreateWizard = () => {
-    setIsCreateOpen(false)
-    setCreateStep(1)
-    setNotesValue('')
-    setUploadedDocuments([])
-  }
-
-  const goToNextStep = () => {
-    if (createStep === 1 && isStepOneValid) {
-      setCreateStep(2)
-      return
-    }
-
-    if (createStep === 2 && isStepTwoValid) {
-      setCreateStep(3)
-    }
-  }
-
-  const goToPreviousStep = () => {
-    if (createStep === 2) {
-      setCreateStep(1)
-      return
-    }
-
-    if (createStep === 3) {
-      setCreateStep(2)
-    }
-  }
-
-  const submitReferral = () => {
-    if (!canCreate || !selectedCase) {
-      return
-    }
-
-    if (!selectedAgency) {
-      return
-    }
-
-    const nowIso = new Date().toISOString()
-    const docs = uploadedDocuments.map((file, index) => ({
-      id: `doc-${selectedCase.id}-${Date.now()}-${index}`,
-      name: file.name,
-      uploadedBy: 'Case Manager - Marychris M. Relon',
-      uploadedAt: nowIso,
-    }))
-
-    if (!docs.length) {
-      const proceedWithoutDocs = window.confirm('No referral documents were attached. Do you want to submit this referral anyway?')
-      if (!proceedWithoutDocs) {
-        return
-      }
-    }
-
-    const newRow: CaseManagerReferral = {
-      id: `ref-${selectedCase.id}-${Date.now()}`,
-      caseId: selectedCase.id,
-      caseNo: selectedCase.caseNo,
-      clientName: selectedCase.clientName,
-      service: resolveStakeholderService(selectedAgency.id, serviceValue.trim()),
-      agencyId: selectedAgency.id,
-      agencyName: selectedAgency.name,
-      status: 'PENDING',
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      remarks: remarksValue.trim() || 'Referral created by Case Manager.',
-      notes: notesValue.trim() || 'No additional notes provided.',
-      documents: docs,
-    }
-
-    createManagedReferral(newRow)
-    closeCreateWizard()
-    setRemarksValue('')
-    setNotesValue('')
-    setUploadedDocuments([])
-    setRefreshKey((prev) => prev + 1)
-  }
-
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-4">
+      {toastMessage.trim() ? (
+        <AppToast message={toastMessage} onClose={() => setToastMessage('')} tone="success" />
+      ) : null}
+
       <header>
         <h1 className={pageHeadingStyles.pageTitle}>Referrals</h1>
         <p className={pageHeadingStyles.pageSubtitle}>Refer cases to partner agencies and monitor status updates from intake to closure.</p>
@@ -279,7 +158,7 @@ export default function ReferralsPage() {
         activeFilters={activeFilters}
         onRemoveFilter={() => setStatusFilter('ALL')}
         onClearFilters={() => setStatusFilter('ALL')}
-        onNewRecord={openCreateWizard}
+        onNewRecord={() => navigate('/case-manager/referrals/new')}
         newRecordLabel="+ New Referral"
         advancedFiltersContent={(
           <div className="space-y-4">
@@ -306,263 +185,6 @@ export default function ReferralsPage() {
           </div>
         )}
       />
-
-      {isCreateOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-2xl rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
-            <div className="border-b border-[#e2e8f0] px-5 py-4">
-              <h2 className="text-[16px] font-extrabold text-slate-900">Create Referral</h2>
-              <p className="mt-1 text-[12px] text-slate-500">Complete each step to create a referral.</p>
-
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {[
-                  { index: 1, label: 'Select Case' },
-                  { index: 2, label: 'Select Agency' },
-                  { index: 3, label: 'Select Service' },
-                ].map((step) => {
-                  const isActive = createStep === step.index
-                  const isDone = createStep > step.index
-
-                  return (
-                    <div
-                      key={step.index}
-                      className={`rounded-[3px] border px-3 py-2 text-center text-[11px] font-bold ${
-                        isActive
-                          ? 'border-[#0b5384] bg-[#0b5384]/10 text-[#0b5384]'
-                          : isDone
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                            : 'border-[#e2e8f0] bg-slate-50 text-slate-500'
-                      }`}
-                    >
-                      {step.label}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 px-5 py-4 md:grid-cols-2">
-              {createStep === 1 ? (
-                <>
-                  <FieldLabel label="Case" full>
-                    <select
-                      value={selectedCaseId}
-                      disabled={openCases.length === 0}
-                      onChange={(event) => {
-                        const nextCase = openCases.find((item) => item.id === event.target.value)
-                        setSelectedCaseId(event.target.value)
-                        if (nextCase) {
-                          setSelectedAgencyId(nextCase.agencyId)
-                          setServiceValue(resolveStakeholderService(nextCase.agencyId, nextCase.service))
-                        }
-                      }}
-                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
-                    >
-                      {openCases.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.caseNo} - {item.clientName}
-                        </option>
-                      ))}
-                      {openCases.length === 0 ? <option value="">No open cases available</option> : null}
-                    </select>
-                  </FieldLabel>
-
-                  {selectedCase ? (
-                    <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-3 md:col-span-2">
-                      <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Selected Case Details</p>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <InfoRow label="Tracking ID" value={selectedCase.caseNo} />
-                        <InfoRow label="Client Name" value={selectedCase.clientName} />
-                        <InfoRow label="Client Type" value={selectedCase.clientType} />
-                        <InfoRow label="Status" value={toCaseHealthStatus(selectedCase.status)} />
-                        <InfoRow label="Date Created" value={formatDisplayDateTime(selectedCase.createdAt)} />
-                        <div className="md:col-span-2">
-                          <InfoRow label="Case Narrative" value={getCaseNarrativeBySeed(selectedCase.caseNo)} />
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-3 text-[12px] text-slate-600 md:col-span-2">
-                    <p className="font-semibold text-slate-800">
-                      {openCases.length === 0 ? 'No open cases available.' : 'No case yet?'}
-                    </p>
-                    <p className="mt-1">
-                      {openCases.length === 0
-                        ? 'Create a new case first, then continue referral creation.'
-                        : 'Create a case first, then return here to continue the referral.'}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        closeCreateWizard()
-                        navigate('/case-manager/cases/new')
-                      }}
-                      className="mt-3 h-8 rounded-[3px] border border-[#0b5384]/30 bg-[#0b5384]/10 px-3 text-[11px] font-bold text-[#0b5384] hover:bg-[#0b5384]/20"
-                    >
-                      + Create Case
-                    </button>
-                  </div>
-                </>
-              ) : null}
-
-              {createStep === 2 ? (
-                <>
-                  <FieldLabel label="Agency" full>
-                    <select
-                      value={selectedAgencyId}
-                      onChange={(event) => {
-                        const nextAgencyId = event.target.value
-                        setSelectedAgencyId(nextAgencyId)
-                        setServiceValue(resolveStakeholderService(nextAgencyId, serviceValue))
-                      }}
-                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
-                    >
-                      {agencies.map((agency) => (
-                        <option key={agency.id} value={agency.id}>
-                          {agency.name}
-                        </option>
-                      ))}
-                    </select>
-                  </FieldLabel>
-
-                  {selectedCase ? (
-                    <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2 text-[12px] text-slate-600 md:col-span-2">
-                      Selected case: <span className="font-semibold text-slate-800">{selectedCase.clientName}</span> ({selectedCase.caseNo})
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-
-              {createStep === 3 ? (
-                <>
-                  <FieldLabel label="Service" full>
-                    <select
-                      value={serviceValue}
-                      onChange={(event) => setServiceValue(event.target.value)}
-                      disabled={!availableServices.length}
-                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
-                    >
-                      {availableServices.length ? (
-                        availableServices.map((service) => (
-                          <option key={service} value={service}>
-                            {service}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="">No available services for this stakeholder</option>
-                      )}
-                    </select>
-                  </FieldLabel>
-
-                  <FieldLabel label="Service Requirements" full>
-                    <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
-                      <p className="mb-2 text-[12px] font-semibold text-slate-700">
-                        Estimated Processing Time:{' '}
-                        <span className="text-[#0b5384]">{selectedServiceDetail?.processingDays ?? '-'} business days</span>
-                      </p>
-                      {selectedServiceRequirements.length ? (
-                        <ul className="space-y-1">
-                          {selectedServiceRequirements.map((requirement) => (
-                            <li key={requirement} className="text-[12px] text-slate-700">• {requirement}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-[12px] text-slate-500">No listed requirements for this service.</p>
-                      )}
-                    </div>
-                  </FieldLabel>
-
-                  <FieldLabel label="Remarks" full>
-                    <textarea
-                      rows={4}
-                      value={remarksValue}
-                      onChange={(event) => setRemarksValue(event.target.value)}
-                      placeholder="Optional context for the receiving agency"
-                      className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
-                    />
-                  </FieldLabel>
-
-                  <FieldLabel label="Notes" full>
-                    <textarea
-                      rows={4}
-                      value={notesValue}
-                      onChange={(event) => setNotesValue(event.target.value)}
-                      placeholder="Add referral notes for receiving agency context"
-                      className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
-                    />
-                  </FieldLabel>
-
-                  <FieldLabel label="Referral Documents" full>
-                    <input
-                      type="file"
-                      multiple
-                      onChange={(event) => setUploadedDocuments(Array.from(event.target.files ?? []))}
-                      className="block w-full rounded-[3px] border border-[#cbd5e1] bg-white px-3 py-2 text-[12px] text-slate-700"
-                    />
-                    {uploadedDocuments.length > 0 ? (
-                      <div className="mt-2 space-y-1 rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
-                        {uploadedDocuments.map((file, index) => (
-                          <p key={`${file.name}-${index}`} className="text-[11px] text-slate-600">• {file.name}</p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </FieldLabel>
-
-                  <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2 text-[12px] text-slate-600 md:col-span-2">
-                    <p>
-                      Case: <span className="font-semibold text-slate-800">{selectedCase?.caseNo ?? '-'}</span>
-                    </p>
-                    <p>
-                      Agency: <span className="font-semibold text-slate-800">{selectedAgency?.name ?? '-'}</span>
-                    </p>
-                  </div>
-                </>
-              ) : null}
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-[#e2e8f0] px-5 py-3">
-              <button
-                type="button"
-                onClick={closeCreateWizard}
-                className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
-              >
-                Cancel
-              </button>
-
-              {createStep > 1 ? (
-                <button
-                  type="button"
-                  onClick={goToPreviousStep}
-                  className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
-                >
-                  Back
-                </button>
-              ) : null}
-
-              {createStep < 3 ? (
-                <button
-                  type="button"
-                  onClick={goToNextStep}
-                  disabled={(createStep === 1 && !isStepOneValid) || (createStep === 2 && !isStepTwoValid)}
-                  className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Next
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={submitReferral}
-                  disabled={!isStepThreeValid}
-                  className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Submit Referral
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -572,32 +194,6 @@ function KpiCard({ title, value, accent }: { title: string; value: number; accen
     <div className={`rounded-[4px] border border-[#cbd5e1] border-l-[4px] ${accent} bg-white px-4 py-4 shadow-sm`}>
       <p className={pageHeadingStyles.metricLabel}>{title}</p>
       <p className="mt-2 text-[30px] leading-none font-black text-[#0f172a]">{value}</p>
-    </div>
-  )
-}
-
-function FieldLabel({
-  label,
-  children,
-  full = false,
-}: {
-  label: string
-  children: ReactNode
-  full?: boolean
-}) {
-  return (
-    <div className={full ? 'md:col-span-2' : ''}>
-      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">{label}</label>
-      {children}
-    </div>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">{label}</p>
-      <p className="mt-1 text-[13px] font-semibold text-slate-700">{value}</p>
     </div>
   )
 }

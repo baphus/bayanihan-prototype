@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type JSX } from 'react'
+import { useMemo, useState, type JSX } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Eye } from 'lucide-react'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
@@ -8,14 +8,10 @@ import {
   formatAddressParts,
   formatDisplayDateTime,
   getCaseManagerAgencies,
-  getStakeholderServiceDetails,
-  getStakeholderServices,
-  resolveStakeholderService,
   toCaseHealthStatus,
   type CaseManagerReferral,
 } from '../../data/unifiedData'
 import {
-  createManagedReferral,
   getManagedCaseById,
   getManagedLatestMilestone,
   getManagedReferralsByCaseId,
@@ -298,10 +294,6 @@ export default function CaseViewPage(): JSX.Element {
         email: caseRecord.nextOfKinProfile?.email || persona.kinEmail,
         address: caseRecord.nextOfKinProfile?.address || persona.kinAddress,
       }
-  const primaryClientName =
-    caseRecord.clientType === 'Next of Kin'
-      ? caseRecord.nextOfKinProfile?.fullName || persona.kinName
-      : caseRecord.ofwProfile?.fullName || persona.ofwName
   const caseStatus = toCaseHealthStatus(caseRecord.status)
   const fallbackSpecialCategories = getSpecialCategories(caseRecord.caseNo)
   const ofwSpecialCategories =
@@ -311,7 +303,6 @@ export default function CaseViewPage(): JSX.Element {
       ? []
       : (caseRecord.nextOfKinProfile?.specialCategories || (caseRecord.clientType === 'Next of Kin' ? fallbackSpecialCategories : []))
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false)
-  const [isReferAgencyOpen, setIsReferAgencyOpen] = useState(false)
   const [editableClientType, setEditableClientType] = useState(caseRecord.clientType)
   const [editableNarrative, setEditableNarrative] = useState(
     caseRecord.caseNarrative?.trim().length
@@ -320,11 +311,6 @@ export default function CaseViewPage(): JSX.Element {
         ? createdCaseFromState.caseNarrative
         : getCaseNarrativeBySeed(caseRecord.id),
   )
-  const [referAgencyId, setReferAgencyId] = useState('')
-  const [referServiceValue, setReferServiceValue] = useState('')
-  const [referRemarks, setReferRemarks] = useState('')
-  const [referNotes, setReferNotes] = useState('')
-  const [referUploadedDocuments, setReferUploadedDocuments] = useState<File[]>([])
   const [toastMessage, setToastMessage] = useState(routeState.toastMessage ?? '')
 
   const allAgencies = getCaseManagerAgencies()
@@ -349,90 +335,6 @@ export default function CaseViewPage(): JSX.Element {
     () => allAgencies.filter((agency) => !referredAgencyIds.has(agency.id)),
     [allAgencies, referredAgencyIds],
   )
-  const availableReferServices = useMemo(() => getStakeholderServices(referAgencyId), [referAgencyId])
-  const selectedReferServiceDetail = useMemo(() => {
-    if (!referAgencyId || !referServiceValue.trim()) {
-      return undefined
-    }
-
-    return getStakeholderServiceDetails(referAgencyId).find((service) => service.title === referServiceValue)
-  }, [referAgencyId, referServiceValue])
-  const selectedReferServiceRequirements = useMemo(() => {
-    return selectedReferServiceDetail?.requiredDocuments ?? []
-  }, [selectedReferServiceDetail])
-
-  useEffect(() => {
-    if (!availableReferServices.length) {
-      setReferServiceValue('')
-      return
-    }
-
-    if (!availableReferServices.includes(referServiceValue)) {
-      setReferServiceValue(availableReferServices[0])
-    }
-  }, [availableReferServices, referServiceValue])
-
-  const openReferAgencyModal = () => {
-    const defaultAgency = referableAgencies[0]
-    const defaultAgencyId = defaultAgency?.id ?? ''
-
-    setReferAgencyId(defaultAgencyId)
-    setReferServiceValue(resolveStakeholderService(defaultAgencyId, caseRecord.service))
-    setReferRemarks('')
-    setReferNotes('')
-    setReferUploadedDocuments([])
-    setIsReferAgencyOpen(true)
-  }
-
-  const submitReferToAgency = () => {
-    if (!referAgencyId || !referServiceValue.trim()) {
-      return
-    }
-
-    const selectedReferAgency = allAgencies.find((agency) => agency.id === referAgencyId)
-
-    if (!selectedReferAgency) {
-      return
-    }
-
-    const nowIso = new Date().toISOString()
-    const referralId = `ref-${caseRecord.id}-${referAgencyId}-${Date.now()}`
-    const docs = referUploadedDocuments.map((file, index) => ({
-      id: `doc-${caseRecord.id}-${Date.now()}-${index}`,
-      name: file.name,
-      uploadedBy: 'Case Manager - Marychris M. Relon',
-      uploadedAt: nowIso,
-    }))
-
-    if (!docs.length) {
-      const proceedWithoutDocs = window.confirm('No referral documents were attached. Do you want to submit this referral anyway?')
-      if (!proceedWithoutDocs) {
-        return
-      }
-    }
-
-    const referralPayload: CaseManagerReferral = {
-      id: referralId,
-      caseId: caseRecord.id,
-      caseNo: caseRecord.caseNo,
-      clientName: primaryClientName,
-      service: resolveStakeholderService(referAgencyId, referServiceValue.trim()),
-      agencyId: selectedReferAgency.id,
-      agencyName: selectedReferAgency.name,
-      status: 'PENDING',
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      remarks: referRemarks.trim() || 'Referral created from Case View page.',
-      notes: referNotes.trim() || 'No additional notes provided.',
-      documents: docs,
-    }
-
-    createManagedReferral(referralPayload)
-
-    setIsReferAgencyOpen(false)
-    setReferUploadedDocuments([])
-    setRefreshKey((prev) => prev + 1)
-  }
 
   const timelineAgencies = useMemo(() => {
     const unique = new Set<string>()
@@ -648,8 +550,8 @@ export default function CaseViewPage(): JSX.Element {
               <h4 className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#64748b]">Agency Referrals</h4>
               <button
                 type="button"
-                onClick={openReferAgencyModal}
-                disabled={referableAgencies.length === 0}
+                onClick={() => navigate(`/case-manager/cases/${caseRecord.id}/refer`)}
+                disabled={referableAgencies.length === 0 || caseStatus === 'CLOSED'}
                 className="px-3 min-h-[30px] bg-[#f1f5f9] text-slate-700 hover:bg-slate-200 text-[11px] font-bold rounded-[3px] transition-colors border border-slate-300 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 + Refer to Agency
@@ -784,131 +686,6 @@ export default function CaseViewPage(): JSX.Element {
                 className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white"
               >
                 Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isReferAgencyOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-2xl rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
-            <div className="border-b border-[#e2e8f0] px-5 py-4">
-              <h2 className="text-[16px] font-extrabold text-slate-900">Refer to Agency</h2>
-              <p className="mt-1 text-[12px] text-slate-500">Create a new agency referral for this case.</p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 px-5 py-4 md:grid-cols-2">
-              <div className="md:col-span-2 rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2 text-[12px] text-slate-700">
-                Case: <span className="font-semibold">{caseRecord.caseNo}</span> ({primaryClientName})
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Agency</label>
-                <select
-                  value={referAgencyId}
-                  onChange={(event) => setReferAgencyId(event.target.value)}
-                  className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
-                >
-                  {referableAgencies.map((agency) => (
-                    <option key={agency.id} value={agency.id}>{agency.name}</option>
-                  ))}
-                  {referableAgencies.length === 0 ? <option value="">No additional agencies available</option> : null}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Service</label>
-                <select
-                  value={referServiceValue}
-                  onChange={(event) => setReferServiceValue(event.target.value)}
-                  disabled={!availableReferServices.length}
-                  className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
-                >
-                  {availableReferServices.length ? (
-                    availableReferServices.map((service) => (
-                      <option key={service} value={service}>{service}</option>
-                    ))
-                  ) : (
-                    <option value="">No service available</option>
-                  )}
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Remarks</label>
-                <textarea
-                  rows={3}
-                  value={referRemarks}
-                  onChange={(event) => setReferRemarks(event.target.value)}
-                  className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
-                  placeholder="Optional remarks for this referral"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Notes</label>
-                <textarea
-                  rows={3}
-                  value={referNotes}
-                  onChange={(event) => setReferNotes(event.target.value)}
-                  className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
-                  placeholder="Optional internal notes"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Service Requirements</label>
-                <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
-                  <p className="mb-2 text-[12px] font-semibold text-slate-700">
-                    Estimated Processing Time:{' '}
-                    <span className="text-[#0b5384]">{selectedReferServiceDetail?.processingDays ?? '-'} business days</span>
-                  </p>
-                  {selectedReferServiceRequirements.length ? (
-                    <ul className="space-y-1">
-                      {selectedReferServiceRequirements.map((requirement) => (
-                        <li key={requirement} className="text-[12px] text-slate-700">• {requirement}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-[12px] text-slate-500">No listed requirements for this service.</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Referral Documents</label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={(event) => setReferUploadedDocuments(Array.from(event.target.files ?? []))}
-                  className="block w-full rounded-[3px] border border-[#cbd5e1] bg-white px-3 py-2 text-[12px] text-slate-700"
-                />
-                {referUploadedDocuments.length > 0 ? (
-                  <div className="mt-2 space-y-1 rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
-                    {referUploadedDocuments.map((file, index) => (
-                      <p key={`${file.name}-${index}`} className="text-[11px] text-slate-600">• {file.name}</p>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t border-[#e2e8f0] px-5 py-3">
-              <button
-                type="button"
-                onClick={() => setIsReferAgencyOpen(false)}
-                className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitReferToAgency}
-                disabled={!referAgencyId || !referServiceValue.trim()}
-                className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                Submit Referral
               </button>
             </div>
           </div>

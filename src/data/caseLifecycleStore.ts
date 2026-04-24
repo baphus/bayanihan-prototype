@@ -15,6 +15,7 @@ import {
   type AddressParts,
   type AgencyStep,
   type CaseManagerCase,
+  type CaseManagerReferralNote,
   type CaseManagerReferral,
   type CaseOverviewData,
   type CaseTimelineItem,
@@ -838,6 +839,18 @@ export function getManagedCases(): CaseManagerCase[] {
   return cloneState(readState()).cases
 }
 
+export function getManagedCasesForOfwEmail(email: string): CaseManagerCase[] {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) {
+    return []
+  }
+
+  return getManagedCases().filter((item) => {
+    const ownerEmail = (item.ofwUserEmail || item.ofwProfile?.email || getClientPersona(item.caseNo).ofwEmail).trim().toLowerCase()
+    return ownerEmail === normalizedEmail
+  })
+}
+
 export function getManagedCaseById(caseId: string): CaseManagerCase | undefined {
   return getManagedCases().find((item) => item.id === caseId)
 }
@@ -894,6 +907,15 @@ export function getManagedReferralsByCaseId(caseId: string): CaseManagerReferral
 }
 
 export function createManagedReferral(referralInput: CaseManagerReferral): CaseManagerReferral {
+  const linkedCase = getManagedCaseById(referralInput.caseId)
+  if (!linkedCase) {
+    throw new Error('Unable to create referral. The linked case no longer exists.')
+  }
+
+  if (toCaseHealthStatus(linkedCase.status) === 'CLOSED') {
+    throw new Error('Unable to create referral. This case is already closed.')
+  }
+
   const nowIso = new Date().toISOString()
 
   const next = updateState((state) => ({
@@ -946,6 +968,28 @@ export function updateManagedReferralStatus(referralId: string, status: Referral
   // Status updates are tracked in the referral's updatedAt timestamp and notes/remarks
   // They don't create automatic milestones - only Agency Focal can add milestones via addManagedReferralMilestone()
   return updated
+}
+
+export function appendManagedReferralNote(referralId: string, noteContent: string, actor: string, timestamp?: string): CaseManagerReferral | null {
+  const trimmedContent = noteContent.trim()
+  if (!trimmedContent) {
+    return null
+  }
+
+  const nowIso = timestamp ?? new Date().toISOString()
+  const entry: CaseManagerReferralNote = {
+    id: `note-${referralId}-${Date.now()}`,
+    content: trimmedContent,
+    createdAt: nowIso,
+    createdBy: actor,
+  }
+
+  return updateManagedReferral(referralId, (current) => ({
+    ...current,
+    notes: trimmedContent,
+    updatedAt: nowIso,
+    noteHistory: [...(current.noteHistory ?? []), entry],
+  }))
 }
 
 export function addManagedReferralMilestone(referralId: string, title: string, description: string): ReferralMilestoneEntry | null {

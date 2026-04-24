@@ -18,6 +18,8 @@ import ClientsPage from './pages/case-manager/ClientsPage'
 import ClientDetailsPage from './pages/case-manager/ClientDetailsPage'
 import ReferralsPage from './pages/case-manager/ReferralsPage'
 import ReferralViewPage from './pages/case-manager/ReferralViewPage'
+import ReferralCreatePage from './pages/case-manager/ReferralCreatePage'
+import CaseReferralCreatePage from './pages/case-manager/CaseReferralCreatePage'
 import StakeholdersPage from './pages/case-manager/StakeholdersPage'
 import StakeholderViewPage from './pages/case-manager/StakeholderViewPage'
 import CaseManagerReportsPage from './pages/case-manager/ReportsPage'
@@ -45,6 +47,11 @@ import SystemAdminNotificationsPage from './pages/system-admin/NotificationsPage
 import SystemAdminSecurityPoliciesPage from './pages/system-admin/SecurityPoliciesPage'
 import SystemAdminSystemSettingsPage from './pages/system-admin/SystemSettingsPage'
 import RequireRole from './components/auth/RequireRole'
+import RequireTrackingOtp from './components/auth/RequireTrackingOtp'
+import TrackingOtpVerificationPage from './pages/TrackingOtpVerificationPage'
+import OfwMyCasesPage from './pages/ofw/MyCasesPage'
+import OfwLayout from './components/layout/OfwLayout'
+import OfwDashboardPage from './pages/ofw/DashboardPage'
 
 export default function App() {
   return (
@@ -57,15 +64,24 @@ export default function App() {
         <Route path="/agencies/:id" element={<AgencyDetailsPage />} />
         
         {/* Case Manager Routes */}
-        <Route path="/case-manager" element={<CaseManagerLayout />}>
+        <Route
+          path="/case-manager"
+          element={(
+            <RequireRole role="Case Manager">
+              <CaseManagerLayout />
+            </RequireRole>
+          )}
+        >
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="cases" element={<CasesPage />} />
           <Route path="cases/new" element={<NewCasePage />} />
           <Route path="cases/:caseId" element={<CaseViewPage />} />
+          <Route path="cases/:caseId/refer" element={<CaseReferralCreatePage />} />
           <Route path="clients" element={<ClientsPage />} />
           <Route path="clients/:clientId" element={<ClientDetailsPage />} />
           <Route path="referrals" element={<ReferralsPage />} />
+          <Route path="referrals/new" element={<ReferralCreatePage />} />
           <Route path="referrals/:referralId" element={<ReferralViewPage />} />
           <Route path="stakeholders" element={<StakeholdersPage />} />
           <Route path="stakeholders/:stakeholderId" element={<StakeholderViewPage />} />
@@ -74,7 +90,14 @@ export default function App() {
         </Route>
 
         {/* Agency Routes */}
-        <Route path="/agency" element={<AgencyLayout />}>
+        <Route
+          path="/agency"
+          element={(
+            <RequireRole role="Agency">
+              <AgencyLayout />
+            </RequireRole>
+          )}
+        >
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AgencyDashboardPage />} />
           <Route path="referred-cases" element={<AgencyReferredCasesPage />} />
@@ -115,10 +138,52 @@ export default function App() {
           <Route path="system-settings" element={<SystemAdminSystemSettingsPage />} />
         </Route>
 
-        <Route path="/track/:trackerNumber/milestones" element={<MilestonesPage />} />
-        <Route path="/track/:trackerNumber/dmw-milestones" element={<DmwMilestonesPage />} />
-        <Route path="/track/:trackerNumber/tesda-milestones" element={<TesdaMilestonesPage />} />
-        <Route path="/track/:trackerNumber" element={<TrackCasePage />} />
+        <Route
+          path="/ofw"
+          element={(
+            <RequireRole role="OFW">
+              <OfwLayout />
+            </RequireRole>
+          )}
+        >
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<OfwDashboardPage />} />
+          <Route path="my-cases" element={<OfwMyCasesPage />} />
+        </Route>
+
+        <Route path="/track/:trackerNumber/verify" element={<TrackingOtpVerificationPage />} />
+        <Route
+          path="/track/:trackerNumber/milestones"
+          element={(
+            <RequireTrackingOtp>
+              <MilestonesPage />
+            </RequireTrackingOtp>
+          )}
+        />
+        <Route
+          path="/track/:trackerNumber/dmw-milestones"
+          element={(
+            <RequireTrackingOtp>
+              <DmwMilestonesPage />
+            </RequireTrackingOtp>
+          )}
+        />
+        <Route
+          path="/track/:trackerNumber/tesda-milestones"
+          element={(
+            <RequireTrackingOtp>
+              <TesdaMilestonesPage />
+            </RequireTrackingOtp>
+          )}
+        />
+        <Route
+          path="/track/:trackerNumber"
+          element={(
+            <RequireTrackingOtp>
+              <TrackCasePage />
+            </RequireTrackingOtp>
+          )}
+        />
         <Route path="/track" element={<TrackYourCasePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

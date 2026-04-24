@@ -101,6 +101,13 @@ export default function AppSidebar({ navigation = [], navigationGroups, user, on
         {/* User Profile */}
         <div className="flex items-center justify-between px-6 py-6 bg-white">
           <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-900 border border-blue-200">
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="Avatar" className="h-full w-full rounded-full object-cover" />
+              ) : (
+                user.initials
+              )}
+            </div>
             <div className="flex flex-col">
               <span className="text-[13px] text-blue-950 font-bold font-body leading-tight whitespace-nowrap">{user.name}</span>
               <span className="text-[10px] font-bold tracking-[0.06em] text-slate-500 mt-0.5 whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis">{user.role}</span>

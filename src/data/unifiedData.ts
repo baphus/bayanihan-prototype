@@ -11,7 +11,7 @@ export function getGoogleMapsPlaceUrl(locationQuery: string): string {
 export type ReferralStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
 export type ClientType = 'Next of Kin' | 'Overseas Filipino Worker'
 export type ReferralActorRole = 'Agency Focal' | 'Case Manager' | 'System'
-export type MockUserRole = 'System Admin' | 'Case Manager' | 'Agency'
+export type MockUserRole = 'System Admin' | 'Case Manager' | 'Agency' | 'OFW'
 
 export type MockAuthUser = {
   email: string
@@ -152,6 +152,12 @@ const MOCK_AUTH_USERS_RAW: MockAuthUser[] = [
     password: 'password123',
     role: 'Agency',
     name: 'Josephus Kim L. Sarsonas',
+  },
+  {
+    email: 'ofw@example.com',
+    password: 'password123',
+    role: 'OFW',
+    name: 'Ricardo J. Mariano',
   },
 ]
 
@@ -667,6 +673,7 @@ export type CaseManagerCase = SharedReferralCase & {
   agencyId: string
   agencyShort: string
   agencyName: string
+  ofwUserEmail?: string
   caseNarrative?: string
   ofwProfile?: {
     fullName: string
@@ -691,6 +698,15 @@ export type CaseManagerCase = SharedReferralCase & {
   }
 }
 
+const MOCK_OFW_OWNER_EMAILS = ['ofw@example.com', 'ofw2@example.com', 'ofw3@example.com']
+
+export type CaseManagerReferralNote = {
+  id: string
+  content: string
+  createdAt: string
+  createdBy: string
+}
+
 export type CaseManagerReferral = {
   id: string
   caseId: string
@@ -704,11 +720,16 @@ export type CaseManagerReferral = {
   updatedAt: string
   remarks: string
   notes: string
+  noteHistory?: CaseManagerReferralNote[]
   documents: Array<{
     id: string
     name: string
     uploadedBy: string
     uploadedAt: string
+    archived?: boolean
+    replacedById?: string
+    replacesId?: string
+    versionGroupId?: string
   }>
 }
 
@@ -742,6 +763,7 @@ export const CASE_MANAGER_CASES: CaseManagerCase[] = REFERRAL_CASES.map((item) =
     agencyId: agency.id,
     agencyShort: agency.short,
     agencyName: agency.name,
+    ofwUserEmail: MOCK_OFW_OWNER_EMAILS[computeStableIndex(item.caseNo, MOCK_OFW_OWNER_EMAILS.length)],
   }
 })
 

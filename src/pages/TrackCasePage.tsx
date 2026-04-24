@@ -27,13 +27,13 @@ function AgencyCard({
   const progressPercent = (completedCount / (steps.length - 1)) * 100
 
   return (
-    <article className={`border-l-4 bg-surface-container-lowest p-[24px] shadow-sm ${borderTone}`}>
-      <div className="mb-6 flex items-center justify-between gap-4 border-b border-surface-container-high pb-[18px]">
+    <article className={`rounded-xl border border-slate-200 bg-white p-6 shadow-sm overflow-hidden relative transition hover:shadow-md ${borderTone.replace('border-', 'border-t-4 border-t-')}`}>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
-          <h3 className="text-[16px] font-bold text-on-surface leading-tight">{name}</h3>
-          <p className="text-[12px] text-on-surface-variant mt-1 leading-tight">{note}</p>
+          <h3 className="text-lg font-bold text-slate-900 leading-tight">{name}</h3>
+          <p className="text-xs text-slate-500 mt-1.5 leading-tight">{note}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {latestMilestoneHref ? (
             <Link
               to={latestMilestoneHref}
@@ -43,13 +43,13 @@ function AgencyCard({
               View Milestones
             </Link>
           ) : null}
-          <span className={`px-2.5 py-[3px] text-[9px] font-bold uppercase tracking-widest ${statusTone} min-w-[70px] text-center`}>{status}</span>
+            <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full ${statusTone} min-w-[80px] text-center`}>{status}</span>
         </div>
       </div>
 
-      <div className="relative mt-7 px-4">
-        <div className="absolute left-[32px] right-[32px] top-[15px] h-[2px] bg-slate-200" />
-        <div className="absolute left-[32px] right-[32px] top-[15px] h-[2px]">
+      <div className="relative mt-8 px-2 sm:px-4">
+        <div className="absolute left-[28px] right-[28px] sm:left-[32px] sm:right-[32px] top-[15px] h-[3px] rounded-full bg-slate-100" />
+        <div className="absolute left-[28px] right-[28px] sm:left-[32px] sm:right-[32px] top-[15px] h-[3px] rounded-full">
           <div className={`h-full transition-all duration-500 ${lineTone}`} style={{ width: `${progressPercent}%` }} />
         </div>
 
@@ -162,65 +162,69 @@ export default function TrackCasePage() {
   const caseHealthStatus = toCaseHealthStatus(pageData.trackedCase.status)
   const caseHealthTone =
     caseHealthStatus === 'OPEN'
-      ? 'bg-blue-100 text-blue-900'
-      : 'bg-slate-200 text-slate-600'
+      ? 'bg-blue-50 text-blue-800 border-blue-200'
+      : 'bg-slate-50 text-slate-700 border-slate-200'
   
   return (
-    <div className="bg-surface font-body text-on-surface">
+    <div className="bg-[#F5F7FA] min-h-screen font-body text-slate-900">
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-[1100px] px-5 py-9">
+      <main className="mx-auto w-full max-w-[1200px] px-4 py-8 sm:px-6 lg:py-12">
         <ServqualFeedbackPanel trackingId={trackingId} />
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          <section className="space-y-[44px] lg:col-span-8">
-            <header className="border-l-[3px] border-primary bg-white px-[28px] py-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                <div>
-                  <h1 className="mt-[2px] font-headline text-[26px] font-[900] uppercase tracking-[-0.02em] text-primary">
-                    Tracking ID: {trackingId}
-                  </h1>
-                  <p className="mt-[6px] text-[11px] font-[500] text-on-surface-variant">
-                    {involvedAgencyCount === 0
-                      ? 'Your case has been created, but no agency referrals have been sent yet.'
-                      : involvedAgencyCount === 1
-                      ? 'Your case is currently being handled by one agency.'
-                      : `Your case is currently being handled by ${involvedAgencyCount} agencies.`}
-                  </p>
-                </div>
-                <div className={`flex items-center gap-[14px] self-start md:self-auto rounded-[3px] px-[12px] py-[6px] ${caseHealthTone}`}>
-                  <span className="text-[9px] font-bold uppercase tracking-[0.1em]">
-                    Status: {caseHealthStatus}
-                  </span>
-                  <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 0, 'wght' 600" }}>verified_user</span>
-                </div>
+          <section className="space-y-8 lg:col-span-8">
+            <header className="rounded-xl border border-slate-200 bg-white px-6 py-6 shadow-sm flex flex-col justify-between gap-4 md:flex-row md:items-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-[#0b5c92]" />
+              <div className="pl-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Case Tracking Status</p>
+                <h1 className="font-headline text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900">
+                  {trackingId}
+                </h1>
+                <p className="mt-2 text-sm font-medium text-slate-600">
+                  {involvedAgencyCount === 0
+                    ? 'Your case has been created, but no agency referrals have been sent yet.'
+                    : involvedAgencyCount === 1
+                    ? 'Your case is currently being handled by one agency.'
+                    : `Your case is currently being handled by ${involvedAgencyCount} agencies.`}
+                </p>
+              </div>
+              <div className={`flex items-center gap-2 self-start md:self-auto rounded-lg border px-4 py-2 ${caseHealthTone}`}>
+                <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1, 'wght' 600" }}>
+                  {caseHealthStatus === 'OPEN' ? 'pending_actions' : 'check_circle'}
+                </span>
+                <span className="text-[11px] font-bold uppercase tracking-widest">
+                  Status: {caseHealthStatus}
+                </span>
               </div>
             </header>
 
             <section className="space-y-4">
-              <h2 className="px-1 text-[9px] font-[800] uppercase tracking-[0.15em] text-outline">Case Overview</h2>
-              <article className="border-l-[3px] border-[#9ccaff] bg-white px-[28px] py-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-                <div className="mb-[32px]">
-                  <h3 className="border-b border-surface-container-high pb-[10px] text-[9.5px] font-[800] uppercase tracking-[0.1em] text-primary">Case Narrative</h3>
-                  <p className="mt-[16px] text-[11px] leading-[1.8] text-on-surface-variant font-[400]">
+              <h2 className="px-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500">Case Overview</h2>
+              <article className="rounded-xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+                <div className="mb-8 rounded-lg bg-slate-50 p-5 border border-slate-100">
+                  <h3 className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-[#0b5c92] flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[14px]">subject</span> Case Narrative
+                  </h3>
+                  <p className="text-sm leading-relaxed text-slate-700">
                     {pageData.caseOverview.narrative}
                   </p>
                 </div>
                 
-                <div className="grid grid-cols-1 gap-x-12 gap-y-8 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-x-12 gap-y-10 lg:grid-cols-3">
                   <div>
-                    <h3 className="border-b border-surface-container-high pb-[10px] text-[9.5px] font-[800] uppercase tracking-[0.1em] text-primary">OFW Information</h3>
-                    <dl className="mt-[18px] space-y-[18px] text-[11px]">
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Full Name</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.ofw.fullName}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Date of Birth</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.ofw.dateOfBirth}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Gender</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.ofw.gender}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Home Address</dt><dd className="font-bold text-[11.5px] text-on-surface leading-snug">{pageData.caseOverview.ofw.homeAddress}</dd></div>
+                    <h3 className="border-b border-slate-200 pb-3 text-[11px] font-bold uppercase tracking-widest text-slate-900">OFW Profile</h3>
+                    <dl className="mt-5 space-y-4 text-sm">
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Full Name</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.ofw.fullName}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Date of Birth</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.ofw.dateOfBirth}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Gender</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.ofw.gender}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Home Address</dt><dd className="font-semibold text-slate-900 leading-snug">{pageData.caseOverview.ofw.homeAddress}</dd></div>
                       {pageData.caseOverview.ofw.specialCategories.length > 0 ? (
                         <div>
-                          <dt className="mb-[6px] text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant">Special Categories</dt>
-                          <dd className="flex flex-wrap gap-[6px]">
+                          <dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Special Categories</dt>
+                          <dd className="flex flex-wrap gap-1.5">
                             {pageData.caseOverview.ofw.specialCategories.map((category) => (
-                              <span key={category} className="flex items-center gap-[2px] rounded-[3px] bg-[#eef4f9] px-[6px] py-[3px] text-[8px] font-[700] text-primary">
-                                <span className="material-symbols-outlined text-[10px]" style={{ fontVariationSettings: "'FILL' 1" }}>escalator_warning</span>
+                              <span key={category} className="flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-[10px] font-bold text-amber-800">
+                                <span className="material-symbols-outlined text-[12px]" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
                                 {category}
                               </span>
                             ))}
@@ -231,19 +235,19 @@ export default function TrackCasePage() {
                   </div>
 
                   <div>
-                    <h3 className="border-b border-surface-container-high pb-[10px] text-[9.5px] font-[800] uppercase tracking-[0.1em] text-primary">Next of Kin</h3>
-                    <dl className="mt-[18px] space-y-[18px] text-[11px]">
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Full Name</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.fullName}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Contact Number</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.contactNumber}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Email Address</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.nextOfKin.emailAddress}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Home Address</dt><dd className="font-bold text-[11.5px] text-on-surface leading-snug">{pageData.caseOverview.nextOfKin.homeAddress}</dd></div>
+                    <h3 className="border-b border-slate-200 pb-3 text-[11px] font-bold uppercase tracking-widest text-slate-900">Next of Kin</h3>
+                    <dl className="mt-5 space-y-4 text-sm">
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Full Name</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.nextOfKin.fullName}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Contact Number</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.nextOfKin.contactNumber}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Email Address</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.nextOfKin.emailAddress}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Home Address</dt><dd className="font-semibold text-slate-900 leading-snug">{pageData.caseOverview.nextOfKin.homeAddress}</dd></div>
                       {pageData.caseOverview.nextOfKin.specialCategories.length > 0 ? (
                         <div>
-                          <dt className="mb-[6px] text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant">Special Categories</dt>
-                          <dd className="flex flex-wrap gap-[6px]">
+                          <dt className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Special Categories</dt>
+                          <dd className="flex flex-wrap gap-1.5">
                             {pageData.caseOverview.nextOfKin.specialCategories.map((category) => (
-                              <span key={category} className="flex items-center gap-[2px] rounded-[3px] bg-[#eef4f9] px-[6px] py-[3px] text-[8px] font-[700] text-primary">
-                                <span className="material-symbols-outlined text-[10px]" style={{ fontVariationSettings: "'FILL' 1" }}>escalator_warning</span>
+                              <span key={category} className="flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-[10px] font-bold text-amber-800">
+                                <span className="material-symbols-outlined text-[12px]" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
                                 {category}
                               </span>
                             ))}
@@ -254,11 +258,11 @@ export default function TrackCasePage() {
                   </div>
 
                   <div>
-                    <h3 className="border-b border-surface-container-high pb-[10px] text-[9.5px] font-[800] uppercase tracking-[0.1em] text-primary">Work History</h3>
-                    <dl className="mt-[18px] space-y-[18px] text-[11px]">
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Last Country</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.workHistory.lastCountry}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Last Position</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.workHistory.lastPosition}</dd></div>
-                      <div><dt className="text-[7.5px] font-bold uppercase tracking-[0.05em] text-on-surface-variant mb-0.5">Arrival Date</dt><dd className="font-bold text-[11.5px] text-on-surface">{pageData.caseOverview.workHistory.arrivalDate}</dd></div>
+                    <h3 className="border-b border-slate-200 pb-3 text-[11px] font-bold uppercase tracking-widest text-slate-900">Work History</h3>
+                    <dl className="mt-5 space-y-4 text-sm">
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Last Country</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.workHistory.lastCountry}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Last Position</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.workHistory.lastPosition}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Arrival Date</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.workHistory.arrivalDate}</dd></div>
                     </dl>
                   </div>
                 </div>
@@ -266,24 +270,29 @@ export default function TrackCasePage() {
             </section>
 
             <section className="space-y-4">
-              <h2 className="px-1 text-[9px] font-[800] uppercase tracking-[0.15em] text-outline">Agency Breakdown</h2>
+              <h2 className="px-2 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500">Agency Breakdown</h2>
 
               {pageData.trackingAgencies.length > 0 ? (
-                pageData.trackingAgencies.map((agency) => (
-                  <AgencyCard
-                    key={agency.name}
-                    {...agency}
-                    latestMilestoneHref={
-                      agency.latestMilestonePath
-                        ? `/track/${encodeURIComponent(trackingId)}${agency.latestMilestonePath}`
-                        : undefined
-                    }
-                  />
-                ))
+                <div className="grid grid-cols-1 gap-4">
+                  {pageData.trackingAgencies.map((agency) => (
+                    <AgencyCard
+                      key={agency.name}
+                      {...agency}
+                      latestMilestoneHref={
+                        agency.latestMilestonePath
+                          ? `/track/${encodeURIComponent(trackingId)}${agency.latestMilestonePath}`
+                          : undefined
+                      }
+                    />
+                  ))}
+                </div>
               ) : (
-                <article className="border-l-[3px] border-[#d1d5db] bg-white px-[28px] py-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-                  <h3 className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">No referrals yet</h3>
-                  <p className="mt-3 text-[11px] leading-6 text-on-surface-variant">
+                <article className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                    <span className="material-symbols-outlined text-slate-400">hourglass_empty</span>
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900">No referrals yet</h3>
+                  <p className="mt-2 text-sm text-slate-500">
                     This case exists in the system, but it has not been referred to any agencies yet.
                   </p>
                 </article>
@@ -291,17 +300,17 @@ export default function TrackCasePage() {
             </section>
           </section>
 
-          <aside className="col-span-1 lg:col-span-4 pl-0 lg:pl-4 mt-6 lg:mt-0">
-            <div id="case-timeline" className="h-full bg-[#f4f6f8] p-7 shadow-sm">
-              <div className="mb-[28px] flex flex-wrap items-center justify-between gap-2 border-b border-surface-container-high pb-[18px]">
+          <aside className="col-span-1 lg:col-span-4 mt-6 lg:mt-0">
+            <div id="case-timeline" className="h-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-6 flex flex-col gap-4 border-b border-slate-100 pb-5">
                 <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-primary">history</span>
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.14em] text-primary">Case Timeline</h2>
+                  <span className="material-symbols-outlined text-[18px] text-[#0b5c92]">history</span>
+                  <h2 className="text-[11px] font-bold uppercase tracking-widest text-[#0b5c92]">Case Timeline</h2>
                 </div>
                 <select
                   value={timelineAgencyFilter}
                   onChange={(event) => setTimelineAgencyFilter(event.target.value)}
-                  className="h-[30px] w-[170px] max-w-full shrink-0 rounded-[3px] border border-surface-container-high bg-white px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-on-surface"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-[#0b5c92]"
                 >
                   <option value="ALL">All agencies</option>
                   {timelineAgencies.map((agency) => (
@@ -310,13 +319,13 @@ export default function TrackCasePage() {
                 </select>
               </div>
 
-              <div className="relative pt-1">
-                <div className="absolute left-[10px] top-[14px] bottom-6 w-[1.5px] bg-[#c1c7d1]/60" />
-                <div className="flex flex-col-reverse gap-[32px]">
+              <div className="relative pt-2">
+                <div className="absolute left-[14px] top-6 bottom-6 w-0.5 bg-slate-100" />
+                <div className="flex flex-col-reverse gap-8">
                   {filteredTimeline.map((item, index) => (
-                    <article key={`${item.date}-${index}`} className="relative grid grid-cols-[22px_1fr] items-start gap-3">
-                      <div className="z-10 flex h-[22px] w-[22px] items-center justify-center overflow-hidden rounded-full border border-white bg-white shadow-sm">
-                        <img src={item.logoUrl} alt={`${item.agency} timeline source`} className="h-full w-full object-cover" />
+                    <article key={`${item.date}-${index}`} className="relative grid grid-cols-[28px_1fr] items-start gap-4">
+                      <div className="z-10 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm p-0.5">
+                        <img src={item.logoUrl} alt={`${item.agency} timeline source`} className="h-full w-full object-contain rounded-full" />
                       </div>
                       <div className="min-w-0">
                         <p className="mb-[2px] text-[7.5px] font-extrabold uppercase tracking-[0.1em] text-primary">{item.date}</p>

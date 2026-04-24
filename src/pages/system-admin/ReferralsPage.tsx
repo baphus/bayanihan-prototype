@@ -258,12 +258,17 @@ export default function ReferralsPage() {
       documents: docs,
     }
 
-    createManagedReferral(newRow)
-    closeCreateWizard()
-    setRemarksValue('')
-    setNotesValue('')
-    setUploadedDocuments([])
-    setRefreshKey((prev) => prev + 1)
+    try {
+      createManagedReferral(newRow)
+      closeCreateWizard()
+      setRemarksValue('')
+      setNotesValue('')
+      setUploadedDocuments([])
+      setRefreshKey((prev) => prev + 1)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to submit referral for this case.'
+      window.alert(message)
+    }
   }
 
   return (
