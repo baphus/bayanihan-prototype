@@ -686,6 +686,8 @@ export type CaseManagerCase = SharedReferralCase & {
   }
   nextOfKinProfile?: {
     fullName: string
+    relationship?: string
+    relationshipOther?: string
     contact: string
     email: string
     address: AddressParts
@@ -705,6 +707,7 @@ export type CaseManagerReferralNote = {
   content: string
   createdAt: string
   createdBy: string
+  parentNoteId?: string
 }
 
 export type CaseManagerReferral = {
@@ -1907,6 +1910,7 @@ export type CaseOverviewData = {
   }
   nextOfKin: {
     fullName: string
+    relationship: string
     contactNumber: string
     emailAddress: string
     homeAddress: string
@@ -2283,6 +2287,7 @@ function buildCaseOverview(trackedCase: SharedReferralCase): CaseOverviewData {
     },
     nextOfKin: {
       fullName: nextOfKin.name,
+      relationship: '-',
       contactNumber: nextOfKin.contact,
       emailAddress: nextOfKin.email,
       homeAddress: formatAddressParts(nextOfKin.address),

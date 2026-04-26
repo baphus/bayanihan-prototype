@@ -108,6 +108,11 @@ function toCaseProfile(caseRecord: CaseManagerCase): {
     },
     nextOfKin: {
       fullName: hasExplicitNoNextOfKin ? '-' : caseRecord.nextOfKinProfile?.fullName || nextOfKin.name,
+      relationship: hasExplicitNoNextOfKin
+        ? '-'
+        : caseRecord.nextOfKinProfile?.relationship === 'Other'
+          ? (caseRecord.nextOfKinProfile?.relationshipOther?.trim() || 'Other')
+          : (caseRecord.nextOfKinProfile?.relationship || '-'),
       contactNumber: hasExplicitNoNextOfKin ? '-' : caseRecord.nextOfKinProfile?.contact || nextOfKin.contact,
       emailAddress: hasExplicitNoNextOfKin ? '-' : caseRecord.nextOfKinProfile?.email || nextOfKin.email,
       homeAddress: formatAddressParts(hasExplicitNoNextOfKin ? emptyAddress : (caseRecord.nextOfKinProfile?.address || nextOfKin.address)),

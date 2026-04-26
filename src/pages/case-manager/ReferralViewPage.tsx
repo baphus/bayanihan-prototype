@@ -4,7 +4,7 @@ import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
 import { formatDisplayDateTime, getAgencyFocalByAgencyId, getCaseManagerAgencies, type CaseManagerReferral, type CaseManagerReferralNote } from '../../data/unifiedData'
 import { getManagedReferralById, updateManagedReferral } from '../../data/caseLifecycleStore'
-import ReferralNotesCarousel from '../../components/ui/ReferralNotesCarousel'
+import CaseCommentsThread from '../../components/ui/CaseCommentsThread'
 
 type TimelineItem = {
   id: string
@@ -221,7 +221,7 @@ export default function ReferralViewPage() {
         .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
     : []
   const pendingChangeSummary = [
-    pendingNoteValue ? `Add note: "${pendingNoteValue.slice(0, 90)}${pendingNoteValue.length > 90 ? '...' : ''}"` : null,
+    pendingNoteValue ? `Add comment: "${pendingNoteValue.slice(0, 90)}${pendingNoteValue.length > 90 ? '...' : ''}"` : null,
     ...Object.entries(pendingReplacements).map(([docId, file]) => {
       const targetDoc = activeDocuments.find((doc) => doc.id === docId)
       return `Replace document: ${targetDoc?.name ?? 'Unknown document'} -> ${file.name}`
@@ -273,8 +273,8 @@ export default function ReferralViewPage() {
         id: `${referral.id}-notes-${Date.now()}`,
         actorType: 'Case Manager',
         logoType: 'bayanihan',
-        title: 'Referral Note Added',
-        description: 'A new referral note was added by the Case Manager.',
+        title: 'Case Comment Added',
+        description: 'A new case comment was added by the Case Manager.',
         timestamp: nowIso,
         actor: CASE_MANAGER_ACTOR,
       })
@@ -467,17 +467,17 @@ export default function ReferralViewPage() {
 
           <section className="rounded-[3px] border border-[#d8dee8] bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#1f2937]`}>Referral Notes</h3>
+              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#1f2937]`}>Case Comments</h3>
               <button
                 type="button"
                 onClick={() => setIsAddNoteOpen((prev) => !prev)}
                 className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a]"
               >
-                Add Note
+                Add Comment
               </button>
             </div>
 
-            <div className="aspect-square border border-[#d8dee8] bg-[#f8fafc] p-3 overflow-y-auto">
+            <div className="max-h-[340px] border border-[#d8dee8] bg-[#f8fafc] p-3 overflow-y-auto">
               {isAddNoteOpen ? (
                 <div className="mb-3 space-y-2 border border-[#d8dee8] bg-white p-3">
                   <textarea
@@ -485,7 +485,7 @@ export default function ReferralViewPage() {
                     onChange={(event) => setNotesDraft(event.target.value)}
                     rows={3}
                     className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[12px] text-slate-700 outline-none focus:border-[#0b5384]"
-                    placeholder="Write a referral note"
+                    placeholder="Write a case comment"
                   />
                   <div className="flex items-center justify-end gap-2">
                     <button
@@ -503,7 +503,7 @@ export default function ReferralViewPage() {
                       onClick={queueNote}
                       className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a]"
                     >
-                      Queue Note
+                      Queue Comment
                     </button>
                   </div>
                 </div>
@@ -511,12 +511,12 @@ export default function ReferralViewPage() {
 
               {pendingNoteValue ? (
                 <div className="mb-3 rounded-[3px] border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending Note</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending Comment</p>
                   <p className="mt-1 text-[11px] text-amber-900">{pendingNoteValue}</p>
                 </div>
               ) : null}
 
-              <ReferralNotesCarousel notes={notesHistory} mostRecentCaseManagerNoteId={mostRecentCaseManagerNote?.id} />
+              <CaseCommentsThread notes={notesHistory} mostRecentCaseManagerNoteId={mostRecentCaseManagerNote?.id} />
             </div>
           </section>
         </aside>
@@ -600,7 +600,7 @@ function ChangeReviewModal({
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 p-4">
       <div className="w-full max-w-lg rounded-[3px] border border-[#d8dee8] bg-white p-4 shadow-xl">
         <h3 className="text-[14px] font-extrabold text-slate-800">Confirm Referral Changes</h3>
-        <p className="mt-1 text-[11px] text-slate-500">Review what will be saved to notes and documents.</p>
+        <p className="mt-1 text-[11px] text-slate-500">Review what will be saved to comments and documents.</p>
         <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto border border-[#e2e8f0] bg-[#f8fafc] p-3">
           {changes.length ? (
             changes.map((change) => (

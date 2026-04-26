@@ -290,6 +290,9 @@ export default function CaseViewPage(): JSX.Element {
     ? null
     : {
         fullName: caseRecord.nextOfKinProfile?.fullName || persona.kinName,
+        relationship: caseRecord.nextOfKinProfile?.relationship === 'Other'
+          ? (caseRecord.nextOfKinProfile?.relationshipOther?.trim() || 'Other')
+          : (caseRecord.nextOfKinProfile?.relationship || '-'),
         contact: caseRecord.nextOfKinProfile?.contact || persona.kinContact,
         email: caseRecord.nextOfKinProfile?.email || persona.kinEmail,
         address: caseRecord.nextOfKinProfile?.address || persona.kinAddress,
@@ -519,6 +522,7 @@ export default function CaseViewPage(): JSX.Element {
                 {nextOfKinDetails ? (
                   <div className="grid grid-cols-1 md:grid-cols-3 border border-[#d8dee8]">
                     <InfoCell label="Full Name" value={nextOfKinDetails.fullName} />
+                    <InfoCell label="Relationship to Client" value={nextOfKinDetails.relationship} />
                     <InfoCell label="Contact Number" value={nextOfKinDetails.contact} />
                     <InfoCell label="Email Address" value={nextOfKinDetails.email} />
                     <InfoCell label="Home Address" value={formatAddressParts(nextOfKinDetails.address)} fullRow />

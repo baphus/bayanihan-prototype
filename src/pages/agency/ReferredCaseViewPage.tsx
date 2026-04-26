@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { JSX, ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass } from './statusBadgeStyles'
 import { getCaseNarrativeBySeed } from '../../data/unifiedData'
 import { getCaseAgency } from '../../data/unifiedData'
-import { formatAddressParts, getAgencyFocalByAgencyId, getClientPersona, getSpecialCategories, type AddressParts, type CaseManagerReferral, type CaseManagerReferralNote } from '../../data/unifiedData'
-import ReferralNotesCarousel from '../../components/ui/ReferralNotesCarousel'
+import { formatAddressParts, getAgencyFocalByAgencyId, getClientPersona, getSpecialCategories, getStakeholderServiceDetails, type AddressParts, type CaseManagerReferral, type CaseManagerReferralNote } from '../../data/unifiedData'
+import CaseCommentsThread from '../../components/ui/CaseCommentsThread'
 import {
   addManagedReferralMilestone,
   getManagedCaseById,
   getManagedLatestMilestone,
   getManagedReferralById,
+  getManagedReferralsByCaseId,
   getManagedReferralMilestones,
   updateManagedReferral,
   updateManagedReferralStatus,
@@ -38,6 +40,7 @@ type DetailCase = {
   ofwContact: string
   ofwAddress: AddressParts
   nextOfKin: string
+  kinRelationship: string
   kinContact: string
   kinEmail: string
   kinAddress: AddressParts
@@ -58,6 +61,17 @@ type TimelineItem = {
   logoSrc: string
 }
 
+type ReferralOverviewRow = {
+  id: string
+  caseNo: string
+  agencyName: string
+  status: CaseStatus
+  service: string
+  latestMilestone: string
+  dateReferred: string
+  dateUpdated: string
+}
+
 const CURRENT_USER_ROLE: UserRole = 'Agency Focal'
 const BAYANIHAN_LOGO = '/logo.png'
 const CASE_MANAGER_ACTOR = 'Case Manager - Marychris M. Relon'
@@ -69,6 +83,22 @@ function getAgencyActorLabel(agencyId: string): string {
 
 function isAcceptedStatus(status: CaseStatus): boolean {
   return status === 'PROCESSING' || status === 'COMPLETED'
+}
+
+function referralStatusTone(status: CaseStatus): string {
+  if (status === 'PENDING') {
+    return 'border-[#fde68a] bg-[#fef3c7] text-[#b45309]'
+  }
+
+  if (status === 'PROCESSING') {
+    return 'border-[#bae6fd] bg-[#e0f2fe] text-[#0369a1]'
+  }
+
+  if (status === 'COMPLETED') {
+    return 'border-[#bbf7d0] bg-[#dcfce7] text-[#15803d]'
+  }
+
+  return 'border-[#fecaca] bg-[#fee2e2] text-[#b91c1c]'
 }
 
 function formatIsoToDisplayDate(iso: string): string {
@@ -88,6 +118,12 @@ function buildDetailCase(referralId: string): DetailCase | null {
   const linkedCase = getManagedCaseById(referral.caseId)
   const persona = getClientPersona(referral.caseNo)
   const contact = persona.ofwContact
+  const hasExplicitNoNextOfKin = Boolean(linkedCase?.ofwProfile) && !linkedCase?.nextOfKinProfile
+  const kinRelationship = hasExplicitNoNextOfKin
+    ? '-'
+    : linkedCase?.nextOfKinProfile?.relationship === 'Other'
+      ? (linkedCase?.nextOfKinProfile?.relationshipOther?.trim() || 'Other')
+      : (linkedCase?.nextOfKinProfile?.relationship || '-')
 
   return {
     id: referral.id,
@@ -104,10 +140,11 @@ function buildDetailCase(referralId: string): DetailCase | null {
     ofwEmail: persona.ofwEmail,
     ofwContact: contact,
     ofwAddress: persona.ofwAddress,
-    nextOfKin: persona.kinName,
-    kinContact: persona.kinContact,
-    kinEmail: persona.kinEmail,
-    kinAddress: persona.kinAddress,
+    nextOfKin: hasExplicitNoNextOfKin ? '-' : linkedCase?.nextOfKinProfile?.fullName || persona.kinName,
+    kinRelationship,
+    kinContact: hasExplicitNoNextOfKin ? '-' : linkedCase?.nextOfKinProfile?.contact || persona.kinContact,
+    kinEmail: hasExplicitNoNextOfKin ? '-' : linkedCase?.nextOfKinProfile?.email || persona.kinEmail,
+    kinAddress: hasExplicitNoNextOfKin ? createEmptyAddress() : linkedCase?.nextOfKinProfile?.address || persona.kinAddress,
     lastCountry: persona.lastCountry,
     lastJob: persona.lastJob,
     arrivalDate: persona.arrivalDate,
@@ -130,6 +167,20 @@ function buildFallbackNotesHistory(referral: CaseManagerReferral): CaseManagerRe
       createdBy: CASE_MANAGER_ACTOR,
     },
   ]
+}
+
+function createEmptyAddress(): AddressParts {
+  return {
+    regionCode: '',
+    regionName: '',
+    provinceCode: '',
+    provinceName: '',
+    municipalityCode: '',
+    municipalityName: '',
+    barangayCode: '',
+    barangayName: '',
+    streetAddress: '',
+  }
 }
 
 function getReferralNotesHistory(referral: CaseManagerReferral | null): CaseManagerReferralNote[] {
@@ -246,18 +297,101 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
   return timeline
 }
 
+function normalizeDocumentMatchValue(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function getRequirementMatchScore(requirement: string, documentName: string): number {
+  const normalizedRequirement = normalizeDocumentMatchValue(requirement)
+  const normalizedDocumentName = normalizeDocumentMatchValue(documentName)
+
+  if (!normalizedRequirement || !normalizedDocumentName) {
+    return 0
+  }
+
+  if (normalizedDocumentName.includes(normalizedRequirement)) {
+    return 100
+  }
+
+  const requirementKeywords = normalizedRequirement.split(' ').filter((token) => token.length >= 4)
+  if (!requirementKeywords.length) {
+    return normalizedDocumentName.includes(normalizedRequirement) ? 1 : 0
+  }
+
+  return requirementKeywords.reduce((score, keyword) => {
+    return normalizedDocumentName.includes(keyword) ? score + 1 : score
+  }, 0)
+}
+
+function matchRequirementsToDocuments(
+  requirements: string[],
+  documents: CaseManagerReferral['documents'],
+): {
+  matches: Array<{ requirement: string; document: CaseManagerReferral['documents'][number] | null }>
+  unassignedDocuments: CaseManagerReferral['documents']
+} {
+  const remainingDocuments = [...documents]
+
+  const matches = requirements.map((requirement, requirementIndex) => {
+    let bestIndex = -1
+    let bestScore = 0
+
+    remainingDocuments.forEach((doc, index) => {
+      const score = getRequirementMatchScore(requirement, doc.name)
+      if (score > bestScore) {
+        bestScore = score
+        bestIndex = index
+      }
+    })
+
+    if (bestIndex === -1 && requirementIndex < remainingDocuments.length) {
+      bestIndex = requirementIndex
+    }
+
+    const matchedDocument = bestIndex >= 0 ? remainingDocuments.splice(bestIndex, 1)[0] : null
+
+    return {
+      requirement,
+      document: matchedDocument,
+    }
+  })
+
+  return {
+    matches,
+    unassignedDocuments: remainingDocuments,
+  }
+}
+
 export default function ReferredCaseViewPage(): JSX.Element {
   const navigate = useNavigate()
   const { caseId } = useParams<{ caseId: string }>()
   const [refreshKey, setRefreshKey] = useState(0)
   const [renderKey, setRenderKey] = useState(0)
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  
+  const [activeReferralId, setActiveReferralId] = useState<string | null>(caseId ?? null)
+
   const selectedCase = caseId ? buildDetailCase(caseId) : null
   const selectedReferral = caseId ? getManagedReferralById(caseId) ?? null : null
-  const notesHistory = getReferralNotesHistory(selectedReferral)
+  const referralOverviewRows = useMemo<ReferralOverviewRow[]>(() => {
+    if (!selectedReferral) {
+      return []
+    }
+
+    return getManagedReferralsByCaseId(selectedReferral.caseId).map((referral) => ({
+      id: referral.id,
+      caseNo: referral.caseNo,
+      agencyName: referral.agencyName,
+      status: referral.status,
+      service: referral.service,
+      latestMilestone: getManagedLatestMilestone(referral.id, 'Referral Sent'),
+      dateReferred: formatIsoToDisplayDate(referral.createdAt),
+      dateUpdated: formatIsoToDisplayDate(referral.updatedAt),
+    }))
+  }, [selectedReferral, refreshKey])
+  const activeReferral = activeReferralId
+    ? getManagedReferralById(activeReferralId) ?? selectedReferral
+    : selectedReferral
+  const notesHistory = getReferralNotesHistory(activeReferral)
   const mostRecentCaseManagerNote = notesHistory.find((note) => note.createdBy.includes('Case Manager'))
-  const latestNoteText = notesHistory[0]?.content ?? ''
 
   const [currentStatus, setCurrentStatus] = useState<CaseStatus>('PENDING')
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
@@ -272,11 +406,8 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const [isUpdateStatusModalOpen, setIsUpdateStatusModalOpen] = useState(false)
   const [nextStatus, setNextStatus] = useState<CaseStatus>('PROCESSING')
   const [statusRemark, setStatusRemark] = useState('')
-  const [isAddNoteOpen, setIsAddNoteOpen] = useState(false)
-  const [noteDraft, setNoteDraft] = useState('')
-  const [pendingNote, setPendingNote] = useState<string | null>(null)
-  const [pendingReplacements, setPendingReplacements] = useState<Record<string, File>>({})
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [replyToNoteId, setReplyToNoteId] = useState<string | null>(null)
   const [activeVersionGroupId, setActiveVersionGroupId] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState('')
 
@@ -292,19 +423,80 @@ export default function ReferredCaseViewPage(): JSX.Element {
         .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
     : []
   const selectedAgency = selectedCase ? getCaseAgency(selectedCase.id) : null
+  const stakeholderServiceDetails = selectedCase ? getStakeholderServiceDetails(selectedCase.agencyId) : []
+  const serviceGroups = selectedCase
+    ? selectedCase.requiredServices.map((serviceTitle) => {
+        const detail = stakeholderServiceDetails.find((item) => item.title === serviceTitle)
+        return {
+          serviceTitle,
+          requiredDocuments: detail?.requiredDocuments ?? [],
+        }
+      })
+    : []
   const agencyName = selectedAgency?.name ?? 'Agency'
   const agencyLogoSrc = selectedAgency?.logoUrl ?? BAYANIHAN_LOGO
   const agencyActor = selectedCase ? getAgencyActorLabel(selectedCase.agencyId) : 'Agency Focal'
+  const replyToNote = replyToNoteId ? notesHistory.find((note) => note.id === replyToNoteId) ?? null : null
   const canAddMilestone = isAcceptedStatus(currentStatus) && CURRENT_USER_ROLE === 'Agency Focal'
-  const pendingNoteValue = pendingNote?.trim() ?? ''
-  const hasPendingChanges = Boolean(pendingNoteValue) || Object.keys(pendingReplacements).length > 0
-  const pendingChangeSummary = [
-    pendingNoteValue ? `Add note: "${pendingNoteValue.slice(0, 90)}${pendingNoteValue.length > 90 ? '...' : ''}"` : null,
-    ...Object.entries(pendingReplacements).map(([docId, file]) => {
-      const target = activeDocuments.find((item) => item.id === docId)
-      return `Replace document: ${target?.name ?? 'Unknown document'} -> ${file.name}`
-    }),
-  ].filter((item): item is string => Boolean(item))
+
+  const referralColumns: Column<ReferralOverviewRow>[] = [
+    {
+      key: 'agencyName',
+      title: 'AGENCY',
+      className: 'w-[24%] whitespace-normal leading-5 align-top',
+      render: (row) => <span className="text-[12px] font-semibold text-slate-700">{row.agencyName}</span>,
+    },
+    {
+      key: 'service',
+      title: 'SERVICE',
+      className: 'w-[23%] whitespace-normal leading-5 align-top',
+      render: (row) => <span className="text-[12px] text-slate-600">{row.service}</span>,
+    },
+    {
+      key: 'status',
+      title: 'STATUS',
+      className: 'w-[14%] whitespace-nowrap align-top',
+      render: (row) => (
+        <span className={`inline-flex rounded-[3px] border px-2 py-0.5 text-[10px] font-extrabold uppercase ${referralStatusTone(row.status)}`}>
+          {row.status}
+        </span>
+      ),
+    },
+    {
+      key: 'latestMilestone',
+      title: 'LATEST MILESTONE',
+      className: 'w-[23%] whitespace-normal leading-5 align-top',
+      render: (row) => <span className="text-[12px] text-slate-600">{row.latestMilestone}</span>,
+    },
+    {
+      key: 'dateUpdated',
+      title: 'UPDATED',
+      className: 'w-[10%] whitespace-nowrap align-top',
+      render: (row) => <span className="text-[11px] text-slate-500">{row.dateUpdated}</span>,
+    },
+    {
+      key: 'action',
+      title: 'ACTION',
+      className: 'w-[6%] whitespace-nowrap text-right align-top',
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => {
+            setActiveReferralId(row.id)
+            setReplyToNoteId(null)
+            setCommentDraft('')
+          }}
+          className={`px-2 min-h-[28px] text-[10px] font-bold rounded-[3px] border transition-colors ${
+            activeReferralId === row.id
+              ? 'bg-[#0b5384] text-white border-[#0b5384]'
+              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+          }`}
+        >
+          {activeReferralId === row.id ? 'Active' : 'Open'}
+        </button>
+      ),
+    },
+  ]
 
   // Force state reset when caseId changes - use explicit dependency on caseId
   useEffect(() => {
@@ -317,20 +509,68 @@ export default function ReferredCaseViewPage(): JSX.Element {
     setMilestoneDescription('')
     setIsUpdateStatusModalOpen(false)
     setStatusRemark('')
-    setIsAddNoteOpen(false)
-    setNoteDraft('')
-    setPendingNote(null)
-    setPendingReplacements({})
-    setIsConfirmModalOpen(false)
+    setCommentDraft('')
+    setReplyToNoteId(null)
     setActiveVersionGroupId(null)
     setSaveMessage('')
     setRefreshKey(0)
     setRenderKey((prev) => prev + 1) // Force a re-render
+    setActiveReferralId(caseId ?? null)
   }, [caseId])
 
-  useEffect(() => {
-    setNoteDraft(latestNoteText)
-  }, [latestNoteText, caseId])
+  const submitComment = () => {
+    if (!activeReferral) {
+      return
+    }
+
+    const trimmed = commentDraft.trim()
+    if (!trimmed) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    const nextContent = trimmed
+
+    updateManagedReferral(activeReferral.id, (current) => {
+      const nextNoteHistory = [
+        ...(current.noteHistory?.length ? current.noteHistory : buildFallbackNotesHistory(current)),
+        {
+          id: `note-${current.id}-${Date.now()}`,
+          content: nextContent,
+          createdAt: nowIso,
+          createdBy: agencyActor,
+          parentNoteId: replyToNote?.id,
+        },
+      ]
+
+      return {
+        ...current,
+        notes: nextContent,
+        noteHistory: nextNoteHistory,
+        updatedAt: nowIso,
+      }
+    })
+
+    if (selectedReferral && activeReferral.id === selectedReferral.id) {
+      setTimeline((prev) => [
+        ...prev,
+        {
+          id: `${activeReferral.id}-agency-comment-${Date.now()}`,
+          agency: agencyName,
+          title: replyToNote ? 'Case Reply Added' : 'Case Comment Added',
+          description: replyToNote ? 'A reply was posted by Agency Focal.' : 'A case comment was added by Agency Focal.',
+          time: nowLabel(),
+          actor: agencyActor,
+          logoSrc: agencyLogoSrc,
+        },
+      ])
+    }
+
+    setCommentDraft('')
+    setReplyToNoteId(null)
+    setRefreshKey((prev) => prev + 1)
+    setSaveMessage(`Saved ${nowLabel()}.`)
+  }
 
   // Load case data fresh whenever caseId changes
   useEffect(() => {
@@ -462,6 +702,18 @@ export default function ReferredCaseViewPage(): JSX.Element {
             </section>
           </div>
 
+          <section className="rounded-[3px] border-2 border-[#0b5384] bg-gradient-to-r from-[#eff6ff] to-[#f8fafc] p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#0b5384]">Case Narrative</h2>
+              <span className="inline-flex items-center rounded-[2px] border border-[#bfdbfe] bg-white px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#0b5384]">
+                Priority Context
+              </span>
+            </div>
+            <p className="mt-2 text-[12px] leading-6 text-slate-700">
+              {getCaseNarrativeBySeed(selectedCase.id)}
+            </p>
+          </section>
+
           <SectionCard title="CLIENT PROFILE">
             <div className="space-y-4">
               <div>
@@ -507,6 +759,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
                   <h3 className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#334155]">Next of Kin Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 border border-[#d8dee8]">
                     <InfoCell label="Full Name" value={selectedCase.nextOfKin} />
+                    <InfoCell label="Relationship to Client" value={selectedCase.kinRelationship} />
                     <InfoCell label="Contact Number" value={selectedCase.kinContact} />
                     <InfoCell label="Email Address" value={selectedCase.kinEmail} />
                     <InfoCell label="Home Address" value={formatAddressParts(selectedCase.kinAddress)} fullRow />
@@ -515,15 +768,130 @@ export default function ReferredCaseViewPage(): JSX.Element {
               ) : null}
             </div>
           </SectionCard>
+
+          <SectionCard title="CASE REFERRALS">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-slate-600">
+                  View other agencies handling this case, their latest progress, and switch the active referral for comments.
+                </p>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
+                  {referralOverviewRows.length} Referral{referralOverviewRows.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <UnifiedTable
+                variant="embedded"
+                data={referralOverviewRows}
+                columns={referralColumns}
+                keyExtractor={(row) => row.id}
+                hideControlBar
+                hidePagination
+              />
+            </div>
+          </SectionCard>
+
+          <SideCard title="DOCUMENTS">
+            <div className="space-y-3">
+              {serviceGroups.map((group) => {
+                const { matches: requirementMatches, unassignedDocuments } = matchRequirementsToDocuments(group.requiredDocuments, activeDocuments)
+                const attachedRequirementCount = requirementMatches.filter((match) => Boolean(match.document)).length
+
+                return (
+                  <div key={group.serviceTitle} className="rounded-[2px] border border-[#d8dee8] bg-[#f8fafc] p-3 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#334155]">{group.serviceTitle}</h3>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        Requirements Attached: {attachedRequirementCount}/{group.requiredDocuments.length}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-500">Required Documents</p>
+                      {requirementMatches.length ? (
+                        requirementMatches.map(({ requirement, document }) => {
+                          const isAttached = Boolean(document)
+
+                          return (
+                            <div key={`${group.serviceTitle}-${requirement}`} className="rounded-[2px] border border-[#e2e8f0] bg-white px-2.5 py-2">
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <p className="text-[11px] text-slate-700">{requirement}</p>
+                                <span
+                                  className={`inline-flex items-center rounded-[2px] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
+                                    isAttached
+                                      ? 'bg-[#ecfdf5] text-[#166534] border border-[#86efac]'
+                                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  }`}
+                                >
+                                  {isAttached ? 'Attached' : 'Missing'}
+                                </span>
+                              </div>
+
+                              {document ? (
+                                <div className="mt-1.5 flex items-center justify-between gap-3 rounded-[2px] border border-[#dbeafe] bg-[#eff6ff] px-2 py-1.5">
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-[#0b5384] truncate">{document.name}</p>
+                                    <p className="text-[9px] text-slate-500 truncate">{document.uploadedBy} • {formatIsoToDisplayDate(document.uploadedAt)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveVersionGroupId(document.versionGroupId ?? document.id)}
+                                      className="text-[10px] text-slate-600 font-bold hover:underline"
+                                    >
+                                      View Versions
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <p className="text-[11px] text-slate-500">No required documents configured for this service.</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-500">Other Attached Files</p>
+                      {unassignedDocuments.length ? (
+                        unassignedDocuments.map((doc) => (
+                          <div key={doc.id} className="bg-white border border-[#e2e8f0] p-2.5 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-[2px] bg-slate-100 text-slate-700 flex items-center justify-center text-[10px] font-black">
+                                <span>F</span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
+                                <p className="text-[9px] text-slate-400 truncate">{doc.uploadedBy} • {formatIsoToDisplayDate(doc.uploadedAt)}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
+                              <button
+                                type="button"
+                                onClick={() => setActiveVersionGroupId(doc.versionGroupId ?? doc.id)}
+                                className="text-[10px] text-slate-600 font-bold hover:underline"
+                              >
+                                View Versions
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[11px] text-slate-500">No additional files outside mapped requirements.</p>
+                      )}
+                    </div>
+                  </div>
+
+                )
+              })}
+            </div>
+          </SideCard>
         </main>
 
         <aside className="xl:col-span-4 space-y-4">
-          <SideCard title="CASE NARRATIVE">
-            <p className="text-[12px] leading-5 text-slate-600">
-              {getCaseNarrativeBySeed(selectedCase.id)}
-            </p>
-          </SideCard>
-
           <SideCard title="REFERRAL TIMELINE">
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -578,242 +946,75 @@ export default function ReferredCaseViewPage(): JSX.Element {
             </div>
           </SideCard>
 
-          <section className="bg-white border border-[#d8dee8] rounded-[2px] p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#334155]`}>REFERRAL NOTES</h3>
-              <button
-                type="button"
-                onClick={() => setIsAddNoteOpen((prev) => !prev)}
-                className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
-              >
-                Add Note
-              </button>
+          <section className="bg-white border border-[#d8dee8] rounded-[2px] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#334155]`}>CASE COMMENTS</h3>
             </div>
-            <div className="aspect-square border border-[#d8dee8] bg-[#f8fafc] p-3 overflow-y-auto">
-              {isAddNoteOpen ? (
-                <div className="mb-3 space-y-2 border border-[#d8dee8] bg-white p-3">
-                  <textarea
-                    value={noteDraft}
-                    onChange={(event) => setNoteDraft(event.target.value)}
-                    rows={3}
-                    className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[12px] text-slate-700 outline-none focus:border-[#0b5384]"
-                    placeholder="Write a referral note"
-                  />
-                  <div className="flex items-center justify-end gap-2">
+            {activeReferral ? (
+              <p className="mb-2 text-[10px] text-slate-500">
+                Commenting under: <span className="font-semibold text-slate-700">{activeReferral.agencyName}</span> - {activeReferral.service}
+              </p>
+            ) : null}
+            <div className="border border-[#d8dee8] bg-[#f8fafc] p-2.5 space-y-2">
+              <div className="max-h-[260px] overflow-y-auto">
+                <CaseCommentsThread
+                  notes={notesHistory}
+                  mostRecentCaseManagerNoteId={mostRecentCaseManagerNote?.id}
+                  onReply={(note) => {
+                    setReplyToNoteId(note.id)
+                  }}
+                />
+              </div>
+
+              <div className="border-t border-[#d8dee8] pt-2 space-y-2">
+                {replyToNote ? (
+                  <div className="flex items-center justify-between gap-2 rounded-[2px] border border-[#d8dee8] bg-white px-2.5 py-1.5">
+                    <p className="text-[10px] text-slate-600">Replying to {replyToNote.createdBy}</p>
                     <button
                       type="button"
-                      onClick={() => {
-                        setIsAddNoteOpen(false)
-                        setNoteDraft(latestNoteText)
-                      }}
-                      className="h-[28px] px-3 border border-[#cbd5e1] bg-white text-slate-700 text-[10px] font-bold rounded-[2px] hover:bg-slate-50"
+                      onClick={() => setReplyToNoteId(null)}
+                      className="text-[10px] font-semibold text-slate-600 hover:underline"
                     >
                       Cancel
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const trimmed = noteDraft.trim()
-                        if (!trimmed || trimmed === latestNoteText.trim()) {
-                          return
-                        }
-                        setPendingNote(trimmed)
-                        setIsAddNoteOpen(false)
-                      }}
-                      className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
-                    >
-                      Queue Note
-                    </button>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
 
-              {pendingNoteValue ? (
-                <div className="mb-3 rounded-[2px] border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending Note</p>
-                  <p className="mt-1 text-[11px] text-amber-900">{pendingNoteValue}</p>
-                </div>
-              ) : null}
+                <textarea
+                  value={commentDraft}
+                  onChange={(event) => setCommentDraft(event.target.value)}
+                  rows={2}
+                  className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[12px] text-slate-700 outline-none focus:border-[#0b5384]"
+                  placeholder={replyToNote ? 'Write your reply' : 'Write a new comment'}
+                />
 
-              <ReferralNotesCarousel notes={notesHistory} mostRecentCaseManagerNoteId={mostRecentCaseManagerNote?.id} />
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommentDraft('')
+                      setReplyToNoteId(null)
+                    }}
+                    className="h-[26px] px-2.5 border border-[#cbd5e1] bg-white text-slate-700 text-[10px] font-semibold rounded-[2px] hover:bg-slate-50"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitComment}
+                    className="h-[26px] px-2.5 bg-[#0b5384] text-white text-[10px] font-semibold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
+                  >
+                    {replyToNote ? 'Post Reply' : 'Post Comment'}
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
-          <SideCard title="DOCUMENTS">
-            <div className="space-y-2">
-              {activeDocuments.map((doc) => (
-                <div key={doc.id} className="bg-[#f5f7fb] border border-[#e2e8f0] p-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-6 h-6 rounded-[2px] bg-slate-100 text-slate-700 flex items-center justify-center text-[10px] font-black">
-                      <span>F</span>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
-                      <p className="text-[9px] text-slate-400 truncate">{doc.uploadedBy} • {formatIsoToDisplayDate(doc.uploadedAt)}</p>
-                      {pendingReplacements[doc.id] ? (
-                        <p className="mt-1 text-[10px] font-semibold text-amber-700">Pending replacement: {pendingReplacements[doc.id].name}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveVersionGroupId(doc.versionGroupId ?? doc.id)}
-                      className="text-[10px] text-slate-600 font-bold hover:underline"
-                    >
-                      View Versions
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRefs.current[doc.id]?.click()}
-                      className="text-[10px] text-[#0b5384] font-bold hover:underline"
-                    >
-                      Replace Document
-                    </button>
-                    <input
-                      ref={(element) => {
-                        fileInputRefs.current[doc.id] = element
-                      }}
-                      data-doc-id={doc.id}
-                      type="file"
-                      onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                        const targetId = event.target.dataset.docId
-                        const file = event.target.files?.[0]
-                        if (!targetId || !file) {
-                          return
-                        }
-
-                        setPendingReplacements((prev) => ({
-                          ...prev,
-                          [targetId]: file,
-                        }))
-                        event.target.value = ''
-                      }}
-                      className="hidden"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SideCard>
         </aside>
       </div>
 
       {saveMessage ? <p className="text-[11px] font-semibold text-[#0b5384]">{saveMessage}</p> : null}
-
-      {hasPendingChanges ? (
-        <button
-          type="button"
-          onClick={() => setIsConfirmModalOpen(true)}
-          className="fixed bottom-6 right-6 z-40 h-[38px] px-4 bg-[#0b5384] text-white text-[11px] font-bold rounded-[3px] border border-[#0b5384] shadow-lg hover:bg-[#09416a]"
-        >
-          Review Pending Changes
-        </button>
-      ) : null}
-
-      {isConfirmModalOpen ? (
-        <ChangeReviewModal
-          changes={pendingChangeSummary}
-          onClose={() => setIsConfirmModalOpen(false)}
-          onDiscard={() => {
-            setPendingNote(null)
-            setPendingReplacements({})
-            setIsConfirmModalOpen(false)
-            setNoteDraft(latestNoteText)
-          }}
-          onSave={() => {
-            if (!selectedReferral) {
-              return
-            }
-
-            const nowIso = new Date().toISOString()
-            const nextTimeline = [...timeline]
-
-            if (pendingNoteValue) {
-              nextTimeline.push({
-                id: `${selectedReferral.id}-agency-note-${Date.now()}`,
-                agency: agencyName,
-                title: 'Referral Note Added',
-                description: 'A referral note was added by Agency Focal.',
-                time: nowLabel(),
-                actor: agencyActor,
-                logoSrc: agencyLogoSrc,
-              })
-            }
-
-            if (Object.keys(pendingReplacements).length > 0) {
-              nextTimeline.push({
-                id: `${selectedReferral.id}-agency-docs-${Date.now()}`,
-                agency: agencyName,
-                title: 'Referral Documents Replaced',
-                description: `${Object.keys(pendingReplacements).length} document${Object.keys(pendingReplacements).length > 1 ? 's were' : ' was'} replaced by Agency Focal.`,
-                time: nowLabel(),
-                actor: agencyActor,
-                logoSrc: agencyLogoSrc,
-              })
-            }
-
-            updateManagedReferral(selectedReferral.id, (current) => {
-              const nextNoteHistory = pendingNoteValue
-                ? [
-                    ...(current.noteHistory?.length ? current.noteHistory : buildFallbackNotesHistory(current)),
-                    {
-                      id: `note-${current.id}-${Date.now()}`,
-                      content: pendingNoteValue,
-                      createdAt: nowIso,
-                      createdBy: agencyActor,
-                    },
-                  ]
-                : current.noteHistory
-
-              const nextDocuments = [...(current.documents ?? [])]
-              Object.entries(pendingReplacements).forEach(([docId, file], index) => {
-                const targetIndex = nextDocuments.findIndex((doc) => doc.id === docId)
-                if (targetIndex < 0) {
-                  return
-                }
-
-                const target = nextDocuments[targetIndex]
-                const versionGroupId = target.versionGroupId ?? target.id
-                const replacementId = `doc-${current.id}-agency-replacement-${Date.now()}-${index}`
-
-                nextDocuments[targetIndex] = {
-                  ...target,
-                  archived: true,
-                  replacedById: replacementId,
-                  versionGroupId,
-                }
-
-                nextDocuments.push({
-                  id: replacementId,
-                  name: file.name,
-                  uploadedBy: agencyActor,
-                  uploadedAt: nowIso,
-                  replacesId: target.id,
-                  versionGroupId,
-                })
-              })
-
-              return {
-                ...current,
-                notes: pendingNoteValue || current.notes,
-                noteHistory: nextNoteHistory,
-                documents: nextDocuments,
-                updatedAt: nowIso,
-              }
-            })
-
-            setTimeline(nextTimeline)
-            setPendingNote(null)
-            setPendingReplacements({})
-            setIsConfirmModalOpen(false)
-            setNoteDraft('')
-            setRefreshKey((prev) => prev + 1)
-            setSaveMessage(`Saved ${nowLabel()}.`)
-          }}
-        />
-      ) : null}
 
       {activeVersionGroupId ? (
         <DocumentVersionsModal
@@ -905,60 +1106,6 @@ export default function ReferredCaseViewPage(): JSX.Element {
           }}
         />
       ) : null}
-    </div>
-  )
-}
-
-function ChangeReviewModal({
-  changes,
-  onClose,
-  onDiscard,
-  onSave,
-}: {
-  changes: string[]
-  onClose: () => void
-  onDiscard: () => void
-  onSave: () => void
-}): JSX.Element {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-      <div className="w-full max-w-lg rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
-        <div className="border-b border-[#e2e8f0] px-5 py-4">
-          <h2 className="text-[16px] font-extrabold text-slate-900">Confirm Referral Changes</h2>
-          <p className="mt-1 text-[12px] text-slate-500">Review what will be saved to notes and documents.</p>
-        </div>
-
-        <div className="max-h-[260px] space-y-2 overflow-y-auto px-5 py-4">
-          {changes.length ? (
-            changes.map((change) => (
-              <p key={change} className="text-[12px] text-slate-700">• {change}</p>
-            ))
-          ) : (
-            <p className="text-[12px] text-slate-500">No pending changes.</p>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-[#e2e8f0] px-5 py-3">
-          <button
-            onClick={onClose}
-            className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
-          >
-            Back
-          </button>
-          <button
-            onClick={onDiscard}
-            className="h-9 rounded-[3px] border border-red-200 bg-red-50 px-3 text-[12px] font-bold text-red-700"
-          >
-            Discard
-          </button>
-          <button
-            onClick={onSave}
-            className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white"
-          >
-            Save Changes
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

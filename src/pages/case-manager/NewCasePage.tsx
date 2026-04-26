@@ -25,6 +25,7 @@ type NameParts = {
 }
 
 const NAME_SUFFIX_OPTIONS = ['', 'Jr', 'Sr', 'II', 'III', 'IV', 'V']
+const NEXT_OF_KIN_RELATIONSHIP_OPTIONS = ['Mother', 'Father', 'Spouse', 'Sibling', 'Other']
 
 function splitNameParts(rawName: string): NameParts {
   const normalized = rawName.trim().replace(/\s+/g, ' ')
@@ -175,6 +176,8 @@ export default function NewCasePage() {
   const [kinContact, setKinContact] = useState('')
   const [kinEmail, setKinEmail] = useState('')
   const [kinAddress, setKinAddress] = useState(createEmptyAddressParts)
+  const [kinRelationship, setKinRelationship] = useState('')
+  const [kinRelationshipOther, setKinRelationshipOther] = useState('')
   const [lastCountry, setLastCountry] = useState('')
   const [lastJobPosition, setLastJobPosition] = useState('')
   const [arrivalDate, setArrivalDate] = useState('')
@@ -203,6 +206,8 @@ export default function NewCasePage() {
       setKinContact('')
       setKinEmail('')
       setKinAddress(createEmptyAddressParts())
+      setKinRelationship('')
+      setKinRelationshipOther('')
       setSpecialSenior(false)
       setSpecialPwd(false)
       setSpecialSoloParent(false)
@@ -227,6 +232,8 @@ export default function NewCasePage() {
     setKinContact(selectedExistingClientProfile.kinContact)
     setKinEmail(selectedExistingClientProfile.kinEmail)
     setKinAddress({ ...selectedExistingClientProfile.kinAddress })
+    setKinRelationship('')
+    setKinRelationshipOther('')
   }, [clientSource, selectedExistingClientProfile])
 
   useEffect(() => {
@@ -238,6 +245,8 @@ export default function NewCasePage() {
     setKinContact('')
     setKinEmail('')
     setKinAddress(createEmptyAddressParts())
+    setKinRelationship('')
+    setKinRelationshipOther('')
   }, [hasNextOfKin])
 
   const canProceedToNextStep = () => {
@@ -256,6 +265,9 @@ export default function NewCasePage() {
 
   const ofwDisplayName = composeNameParts(ofwNameParts).trim() || selectedExistingClient?.clientName || 'Unnamed Client'
   const kinDisplayName = composeNameParts(kinNameParts).trim()
+  const kinRelationshipDisplay = kinRelationship === 'Other'
+    ? (kinRelationshipOther.trim() || 'Other')
+    : (kinRelationship || 'Not yet provided')
   const caseNarrativePreview = caseNarrative.trim()
 
   const handleNext = () => {
@@ -308,6 +320,8 @@ export default function NewCasePage() {
       nextOfKinProfile: hasNextOfKin
         ? {
             fullName: composeNameParts(kinNameParts),
+            relationship: kinRelationship,
+            relationshipOther: kinRelationship === 'Other' ? kinRelationshipOther.trim() : '',
             contact: kinContact,
             email: kinEmail,
             address: { ...kinAddress },
@@ -910,6 +924,36 @@ export default function NewCasePage() {
                         </select>
                       </Field>
 
+                      <Field label="Relationship to Client">
+                        <select
+                          value={kinRelationship}
+                          onChange={(event) => {
+                            const nextValue = event.target.value
+                            setKinRelationship(nextValue)
+
+                            if (nextValue !== 'Other') {
+                              setKinRelationshipOther('')
+                            }
+                          }}
+                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                        >
+                          <option value="">Select relationship</option>
+                          {NEXT_OF_KIN_RELATIONSHIP_OPTIONS.map((item) => (
+                            <option key={item} value={item}>{item}</option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      {kinRelationship === 'Other' ? (
+                        <Field label="Specify Relationship">
+                          <input
+                            value={kinRelationshipOther}
+                            onChange={(event) => setKinRelationshipOther(event.target.value)}
+                            className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                          />
+                        </Field>
+                      ) : null}
+
                       <Field label="Contact Number">
                         <CountryCodePhoneInput value={kinContact} onChange={setKinContact} />
                       </Field>
@@ -976,6 +1020,11 @@ export default function NewCasePage() {
                       {hasNextOfKin
                         ? (kinDisplayName.length > 0 ? formatPersonName(kinDisplayName) : 'Not yet provided')
                         : 'No next of kin indicated'}
+                    </div>
+                  </Field>
+                  <Field label="Relationship to Client" className="md:col-span-2">
+                    <div className="min-h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700 flex items-center">
+                      {hasNextOfKin ? kinRelationshipDisplay : 'No next of kin indicated'}
                     </div>
                   </Field>
                   <Field label="Narrative Preview" className="md:col-span-2">

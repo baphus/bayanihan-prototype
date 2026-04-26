@@ -238,6 +238,7 @@ export default function TrackCasePage() {
                     <h3 className="border-b border-slate-200 pb-3 text-[11px] font-bold uppercase tracking-widest text-slate-900">Next of Kin</h3>
                     <dl className="mt-5 space-y-4 text-sm">
                       <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Full Name</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.nextOfKin.fullName}</dd></div>
+                      <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Relationship to Client</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.nextOfKin.relationship}</dd></div>
                       <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Contact Number</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.nextOfKin.contactNumber}</dd></div>
                       <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Email Address</dt><dd className="font-semibold text-slate-900">{pageData.caseOverview.nextOfKin.emailAddress}</dd></div>
                       <div><dt className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Home Address</dt><dd className="font-semibold text-slate-900 leading-snug">{pageData.caseOverview.nextOfKin.homeAddress}</dd></div>
