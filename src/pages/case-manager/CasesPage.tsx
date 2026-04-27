@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
+import { UnifiedTable, type Column, type FilterChip, type SortDirection } from '../../components/ui/UnifiedTable'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getCaseManagerAgencies, getClientPersona, getSpecialCategories, toCaseHealthStatus, type CaseManagerCase } from '../../data/unifiedData'
 import { getManagedCases, getManagedReferralsByCaseId } from '../../data/caseLifecycleStore'
@@ -8,6 +8,7 @@ import { getManagedCases, getManagedReferralsByCaseId } from '../../data/caseLif
 type StatusFilter = 'ALL' | 'OPEN' | 'CLOSED'
 type ClientTypeFilter = 'ALL' | 'Overseas Filipino Worker' | 'Next of Kin'
 type VulnerabilityFilter = 'ALL' | 'Senior Citizen' | 'PWD' | 'Solo Parent' | 'None'
+type SortableCaseColumn = 'caseNo' | 'clientType' | 'clientName' | 'specialCategory' | 'createdAt' | 'caseAge' | 'caseStatus' | 'referredTo'
 
 type CaseViewRow = CaseManagerCase & {
   caseStatus: 'OPEN' | 'CLOSED'
@@ -34,6 +35,29 @@ function formatTimestamp(timestamp: string): string {
   }).format(parsed)
 }
 
+function formatCaseAge(timestamp: string): string {
+  const parsed = new Date(timestamp.replace(' ', 'T'))
+  if (Number.isNaN(parsed.getTime())) {
+    return 'N/A'
+  }
+
+  const ageInMs = Math.max(0, Date.now() - parsed.getTime())
+  const oneDayInMs = 24 * 60 * 60 * 1000
+  const ageInDays = Math.floor(ageInMs / oneDayInMs)
+
+  if (ageInDays > 0) {
+    return `${ageInDays} day${ageInDays === 1 ? '' : 's'}`
+  }
+
+  const ageInHours = Math.floor(ageInMs / (60 * 60 * 1000))
+  if (ageInHours > 0) {
+    return `${ageInHours} hr${ageInHours === 1 ? '' : 's'}`
+  }
+
+  const ageInMinutes = Math.floor(ageInMs / (60 * 1000))
+  return `${Math.max(1, ageInMinutes)} min`
+}
+
 function formatReferredToSummary(referredTo: string): string {
   const agencies = referredTo
     .split(',')
@@ -58,12 +82,15 @@ export default function CasesPage() {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [isColumnsOpen, setIsColumnsOpen] = useState(false)
+  const [sortKey, setSortKey] = useState<SortableCaseColumn>('createdAt')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
     caseNo: true,
     clientType: true,
     clientName: true,
     specialCategory: true,
     createdAt: true,
+    caseAge: true,
     caseStatus: true,
     referredTo: true,
     actions: true,
@@ -84,7 +111,7 @@ export default function CasesPage() {
       caseStatus: toCaseHealthStatus(item.status),
       displayClientName:
         item.clientType === 'Next of Kin'
-          ? item.nextOfKinProfile?.fullName || getClientPersona(item.caseNo).kinName
+          ? (item.nextOfKinProfiles?.[0] || item.nextOfKinProfile)?.fullName || getClientPersona(item.caseNo).kinName
           : item.ofwProfile?.fullName || getClientPersona(item.caseNo).ofwName,
       referredTo: (() => {
         const agencies = Array.from(new Set(getManagedReferralsByCaseId(item.id).map((referral) => referral.agencyName)))
@@ -102,7 +129,7 @@ export default function CasesPage() {
       specialCategory: (() => {
         const categories =
           item.clientType === 'Next of Kin'
-            ? item.nextOfKinProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
+            ? (item.nextOfKinProfiles?.[0] || item.nextOfKinProfile)?.specialCategories ?? getSpecialCategories(item.caseNo)
             : item.ofwProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
         return categories.length > 0 ? categories.join(', ') : 'None'
       })(),
@@ -132,7 +159,47 @@ export default function CasesPage() {
     })
   }, [rows, searchValue, statusFilter, clientTypeFilter, vulnerabilityFilter])
 
-  const totalRecords = filteredCases.length
+  const sortedCases = useMemo(() => {
+    const sorted = [...filteredCases]
+    const multiplier = sortDirection === 'asc' ? 1 : -1
+
+    sorted.sort((a, b) => {
+      const getSortValue = (item: CaseViewRow): string | number => {
+        switch (sortKey) {
+          case 'caseNo':
+            return item.caseNo
+          case 'clientType':
+            return item.clientType
+          case 'clientName':
+            return item.displayClientName
+          case 'specialCategory':
+            return item.specialCategory
+          case 'createdAt':
+          case 'caseAge':
+            return new Date(item.createdAt.replace(' ', 'T')).getTime()
+          case 'caseStatus':
+            return item.caseStatus
+          case 'referredTo':
+            return item.referredTo
+          default:
+            return ''
+        }
+      }
+
+      const aValue = getSortValue(a)
+      const bValue = getSortValue(b)
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return (aValue - bValue) * multiplier
+      }
+
+      return String(aValue).localeCompare(String(bValue)) * multiplier
+    })
+
+    return sorted
+  }, [filteredCases, sortDirection, sortKey])
+
+  const totalRecords = sortedCases.length
   const totalPages = Math.max(1, Math.ceil(totalRecords / rowsPerPage))
 
   useEffect(() => {
@@ -146,8 +213,8 @@ export default function CasesPage() {
 
   const paginatedCases = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage
-    return filteredCases.slice(start, start + rowsPerPage)
-  }, [filteredCases, currentPage, rowsPerPage])
+    return sortedCases.slice(start, start + rowsPerPage)
+  }, [sortedCases, currentPage, rowsPerPage])
 
   const kpis = useMemo(() => {
     const closedCount = rows.filter((item) => item.caseStatus === 'CLOSED').length
@@ -205,32 +272,45 @@ export default function CasesPage() {
       key: 'caseNo',
       title: 'TRACKING ID',
       className: 'whitespace-nowrap',
+      sortable: true,
       render: (row) => <span className="font-bold text-[#0b5384] text-[15px] whitespace-nowrap">{row.caseNo}</span>,
     },
     {
       key: 'clientType',
       title: 'CLIENT TYPE',
+      sortable: true,
       render: (row) => <span className="text-[13px] text-slate-600 font-medium">{row.clientType}</span>,
     },
     {
       key: 'clientName',
       title: 'CLIENT NAME',
+      sortable: true,
       render: (row) => <span className="font-bold text-[15px] text-slate-800">{row.displayClientName}</span>,
     },
     {
       key: 'specialCategory',
       title: 'VULNERABILITY',
+      sortable: true,
       render: (row) => <span className="text-[13px] text-slate-600 font-medium">{row.specialCategory}</span>,
     },
     {
       key: 'createdAt',
       title: 'DATE CREATED',
+      sortable: true,
       render: (row) => <span className="text-[13px] text-slate-600 font-medium">{formatTimestamp(row.createdAt)}</span>,
+    },
+    {
+      key: 'caseAge',
+      title: 'AGE OF CASE',
+      className: 'whitespace-nowrap',
+      sortable: true,
+      render: (row) => <span className="text-[13px] text-slate-600 font-medium">{formatCaseAge(row.createdAt)}</span>,
     },
     {
       key: 'caseStatus',
       title: 'STATUS',
       className: 'whitespace-nowrap',
+      sortable: true,
       render: (row) => (
         <span
           className={`px-2 py-0.5 text-[11px] font-extrabold uppercase rounded-[3px] border ${
@@ -247,6 +327,7 @@ export default function CasesPage() {
       key: 'referredTo',
       title: 'REFERRED TO',
       className: 'whitespace-nowrap text-center',
+      sortable: true,
       render: (row) => (
         <div className="flex justify-center" title={row.referredTo}>
           <div className="h-7 w-7 overflow-hidden rounded-full border border-white bg-white shadow-sm">
@@ -312,6 +393,13 @@ export default function CasesPage() {
         onPageChange={(page) => setCurrentPage(Math.min(Math.max(page, 1), totalPages))}
         onRowsPerPageChange={(rows) => {
           setRowsPerPage(rows)
+          setCurrentPage(1)
+        }}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        onSortChange={(key, direction) => {
+          setSortKey(key as SortableCaseColumn)
+          setSortDirection(direction)
           setCurrentPage(1)
         }}
         viewMode={viewMode}

@@ -4,12 +4,12 @@ export default function UsersPage() {
   return (
     <SystemAdminCrudPage
       entity="users"
-      title="System Users"
-      subtitle="View, update, and deactivate user accounts and role access profiles."
+      title="User Management"
+      subtitle="Manage system users"
       recordLabel="User"
-      newRecordLabel="+ New User"
-      searchPlaceholder="Search by user ID, name, role scope, or owner..."
-      allowCreate={false}
+      newRecordLabel="Add User"   // 👈 THIS controls button text
+      searchPlaceholder="Search users..."
+      allowCreate={true}         // 👈 make sure this is true
     />
   )
 }

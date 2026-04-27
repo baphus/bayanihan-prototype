@@ -1,11 +1,15 @@
-﻿import type { ReactNode } from "react";
+﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 export interface Column<T> {
   key: string;
   title: string;
   className?: string; // e.g. w-32 or text-right
+  sortable?: boolean;
+  sortAccessor?: (row: T) => string | number | boolean | Date | null | undefined;
   render?: (row: T) => ReactNode;
 }
+
+export type SortDirection = "asc" | "desc";
 
 export interface FilterChip {
   key: string;
@@ -49,6 +53,13 @@ export interface UnifiedTableProps<T> {
   rowsPerPageOptions?: number[];
   onPageChange?: (page: number) => void;
   onRowsPerPageChange?: (rows: number) => void;
+
+  sortKey?: string;
+  sortDirection?: SortDirection;
+  onSortChange?: (key: string, direction: SortDirection) => void;
+  defaultSortKey?: string;
+  defaultSortDirection?: SortDirection;
+  showSortReset?: boolean;
   
   hideControlBar?: boolean;
   hidePagination?: boolean;
@@ -91,10 +102,167 @@ export function UnifiedTable<T>({
   onPageChange,
   onRowsPerPageChange,
 
+  sortKey,
+  sortDirection,
+  onSortChange,
+  defaultSortKey,
+  defaultSortDirection,
+  showSortReset = true,
+
   hideControlBar = false,
   hidePagination = false,
   variant = "default"
 }: UnifiedTableProps<T>) {
+  const isColumnSortable = (col: Column<T>): boolean =>
+    col.sortable ?? (col.key.toLowerCase() !== "actions" && col.title.toUpperCase() !== "ACTIONS");
+
+  const inferDirectionForColumn = (col: Column<T>): SortDirection => {
+    const signature = `${col.key} ${col.title}`.toLowerCase();
+    if (/(date|time|age|timestamp|created|updated)/.test(signature)) {
+      return "desc";
+    }
+
+    return "asc";
+  };
+
+  const inferredDefault = useMemo(() => {
+    const sortableColumns = columns.filter((col) => isColumnSortable(col));
+    if (sortableColumns.length === 0) {
+      return { key: undefined as string | undefined, direction: "asc" as SortDirection };
+    }
+
+    if (defaultSortKey) {
+      const matched = sortableColumns.find((col) => col.key === defaultSortKey);
+      return {
+        key: matched?.key,
+        direction: defaultSortDirection ?? (matched ? inferDirectionForColumn(matched) : "asc"),
+      };
+    }
+
+    const preferred =
+      sortableColumns.find((col) => /(created|updated).*?(at|date)|timestamp|age/i.test(col.key)) ||
+      sortableColumns.find((col) => /(date|time|age|created|updated)/i.test(col.title));
+
+    if (preferred) {
+      return { key: preferred.key, direction: defaultSortDirection ?? inferDirectionForColumn(preferred) };
+    }
+
+    return {
+      key: sortableColumns[0].key,
+      direction: defaultSortDirection ?? "asc",
+    };
+  }, [columns, defaultSortDirection, defaultSortKey]);
+
+  const [internalSortKey, setInternalSortKey] = useState<string | undefined>(
+    sortKey ?? inferredDefault.key,
+  );
+  const [internalSortDirection, setInternalSortDirection] = useState<SortDirection>(
+    sortDirection ?? inferredDefault.direction,
+  );
+
+  useEffect(() => {
+    if (sortKey !== undefined) {
+      return;
+    }
+
+    const hasCurrentSort =
+      !!internalSortKey && columns.some((col) => col.key === internalSortKey && isColumnSortable(col));
+
+    if (!hasCurrentSort) {
+      setInternalSortKey(inferredDefault.key);
+      setInternalSortDirection(inferredDefault.direction);
+    }
+  }, [columns, inferredDefault.direction, inferredDefault.key, internalSortKey, sortKey]);
+
+  const effectiveSortKey = sortKey ?? internalSortKey ?? inferredDefault.key;
+  const effectiveSortDirection =
+    sortKey !== undefined
+      ? sortDirection ?? inferredDefault.direction
+      : internalSortDirection;
+
+  const resolveComparableValue = (value: unknown): string | number => {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    if (value instanceof Date) {
+      return value.getTime();
+    }
+
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    if (typeof value === "boolean") {
+      return value ? 1 : 0;
+    }
+
+    const text = String(value);
+    const maybeDate = Date.parse(text);
+    if (!Number.isNaN(maybeDate)) {
+      return maybeDate;
+    }
+
+    return text;
+  };
+
+  const sortedData = useMemo(() => {
+    if (!effectiveSortKey) {
+      return data;
+    }
+
+    const targetColumn = columns.find((col) => col.key === effectiveSortKey);
+    if (!targetColumn || !isColumnSortable(targetColumn)) {
+      return data;
+    }
+
+    const directionMultiplier = effectiveSortDirection === "asc" ? 1 : -1;
+
+    return [...data].sort((a, b) => {
+      const rawA = targetColumn.sortAccessor ? targetColumn.sortAccessor(a) : (a as Record<string, unknown>)[targetColumn.key];
+      const rawB = targetColumn.sortAccessor ? targetColumn.sortAccessor(b) : (b as Record<string, unknown>)[targetColumn.key];
+      const valueA = resolveComparableValue(rawA);
+      const valueB = resolveComparableValue(rawB);
+
+      if (typeof valueA === "number" && typeof valueB === "number") {
+        return (valueA - valueB) * directionMultiplier;
+      }
+
+      return String(valueA).localeCompare(String(valueB), undefined, { numeric: true, sensitivity: "base" }) * directionMultiplier;
+    });
+  }, [columns, data, effectiveSortDirection, effectiveSortKey]);
+
+  const handleSortToggle = (columnKey: string) => {
+    const nextDirection: SortDirection =
+      effectiveSortKey === columnKey && effectiveSortDirection === "asc" ? "desc" : "asc";
+
+    if (onSortChange) {
+      onSortChange(columnKey, nextDirection);
+      return;
+    }
+
+    setInternalSortKey(columnKey);
+    setInternalSortDirection(nextDirection);
+  };
+
+  const hasSortableColumns = columns.some((col) => isColumnSortable(col));
+  const canResetSort =
+    !!inferredDefault.key &&
+    (effectiveSortKey !== inferredDefault.key || effectiveSortDirection !== inferredDefault.direction);
+
+  const handleResetSort = () => {
+    if (!inferredDefault.key) {
+      return;
+    }
+
+    if (onSortChange) {
+      onSortChange(inferredDefault.key, inferredDefault.direction);
+      return;
+    }
+
+    setInternalSortKey(inferredDefault.key);
+    setInternalSortDirection(inferredDefault.direction);
+  };
 
   return (
     <div className="space-y-8 w-full">
@@ -146,6 +314,17 @@ export function UnifiedTable<T>({
                 className="h-[40px] px-4 border border-[#cbd5e1] text-[14px] font-bold text-slate-600 rounded-[2px] bg-white flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors whitespace-nowrap"
               >
                 <span className="material-symbols-outlined text-[18px]">view_column</span> Columns
+              </button>
+            )}
+
+            {showSortReset && hasSortableColumns && (
+              <button
+                type="button"
+                onClick={handleResetSort}
+                disabled={!canResetSort}
+                className="h-[40px] px-4 border border-[#cbd5e1] text-[14px] font-bold text-slate-600 rounded-[2px] bg-white flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">restart_alt</span> Reset Sort
               </button>
             )}
             
@@ -216,13 +395,26 @@ export function UnifiedTable<T>({
                       key={col.key} 
                       className={`px-5 py-4 text-[12px] font-extrabold uppercase tracking-widest text-[#64748b] whitespace-nowrap ${col.className || ''}`}
                     >
-                      {col.title}
+                      {isColumnSortable(col) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSortToggle(col.key)}
+                          className="inline-flex items-center gap-1 hover:text-[#0b5384] transition-colors"
+                        >
+                          <span>{col.title}</span>
+                          <span className="material-symbols-outlined text-[15px] leading-none">
+                            {effectiveSortKey === col.key ? (effectiveSortDirection === "asc" ? "arrow_upward" : "arrow_downward") : "unfold_more"}
+                          </span>
+                        </button>
+                      ) : (
+                        col.title
+                      )}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#cbd5e1] bg-white">
-                {data.map((row) => (
+                {sortedData.map((row) => (
                   <tr key={keyExtractor(row)} className="hover:bg-slate-50 transition-colors group">
                     {columns.map((col) => (
                       <td key={`${keyExtractor(row)}-${col.key}`} className={`px-5 py-4 ${col.className || ''}`}>
@@ -233,7 +425,7 @@ export function UnifiedTable<T>({
                 ))}
               </tbody>
             </table>
-            {data.length === 0 && (
+            {sortedData.length === 0 && (
                <div className="flex flex-col items-center justify-center p-12 text-center">
                  <span className="material-symbols-outlined mb-3 text-4xl text-slate-300">inbox</span>
                  <p className="text-[14px] font-bold text-slate-700">No records found</p>
@@ -244,7 +436,7 @@ export function UnifiedTable<T>({
         ) : (
           <div className="p-5 bg-slate-50 border-t border-[#cbd5e1]">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {data.map((row) => (
+              {sortedData.map((row) => (
                 <div key={keyExtractor(row)} className="border border-[#cbd5e1] rounded-[4px] p-5 bg-white shadow-sm flex flex-col gap-4 hover:shadow-md transition">
                   {columns.map((col) => (
                     <div 
@@ -266,7 +458,7 @@ export function UnifiedTable<T>({
                 </div>
               ))}
             </div>
-            {data.length === 0 && (
+            {sortedData.length === 0 && (
                <div className="flex flex-col items-center justify-center p-12 text-center">
                  <span className="material-symbols-outlined mb-3 text-4xl text-slate-300">inbox</span>
                  <p className="text-[14px] font-bold text-slate-700">No records found</p>

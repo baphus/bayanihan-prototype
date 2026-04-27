@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import type { JSX, ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
@@ -118,12 +118,13 @@ function buildDetailCase(referralId: string): DetailCase | null {
   const linkedCase = getManagedCaseById(referral.caseId)
   const persona = getClientPersona(referral.caseNo)
   const contact = persona.ofwContact
-  const hasExplicitNoNextOfKin = Boolean(linkedCase?.ofwProfile) && !linkedCase?.nextOfKinProfile
+  const primaryNextOfKinProfile = linkedCase?.nextOfKinProfiles?.[0] || linkedCase?.nextOfKinProfile
+  const hasExplicitNoNextOfKin = Boolean(linkedCase?.ofwProfile) && !primaryNextOfKinProfile
   const kinRelationship = hasExplicitNoNextOfKin
     ? '-'
-    : linkedCase?.nextOfKinProfile?.relationship === 'Other'
-      ? (linkedCase?.nextOfKinProfile?.relationshipOther?.trim() || 'Other')
-      : (linkedCase?.nextOfKinProfile?.relationship || '-')
+    : primaryNextOfKinProfile?.relationship === 'Other'
+      ? (primaryNextOfKinProfile?.relationshipOther?.trim() || 'Other')
+      : (primaryNextOfKinProfile?.relationship || '-')
 
   return {
     id: referral.id,
@@ -140,11 +141,11 @@ function buildDetailCase(referralId: string): DetailCase | null {
     ofwEmail: persona.ofwEmail,
     ofwContact: contact,
     ofwAddress: persona.ofwAddress,
-    nextOfKin: hasExplicitNoNextOfKin ? '-' : linkedCase?.nextOfKinProfile?.fullName || persona.kinName,
+    nextOfKin: hasExplicitNoNextOfKin ? '-' : primaryNextOfKinProfile?.fullName || persona.kinName,
     kinRelationship,
-    kinContact: hasExplicitNoNextOfKin ? '-' : linkedCase?.nextOfKinProfile?.contact || persona.kinContact,
-    kinEmail: hasExplicitNoNextOfKin ? '-' : linkedCase?.nextOfKinProfile?.email || persona.kinEmail,
-    kinAddress: hasExplicitNoNextOfKin ? createEmptyAddress() : linkedCase?.nextOfKinProfile?.address || persona.kinAddress,
+    kinContact: hasExplicitNoNextOfKin ? '-' : primaryNextOfKinProfile?.contact || persona.kinContact,
+    kinEmail: hasExplicitNoNextOfKin ? '-' : primaryNextOfKinProfile?.email || persona.kinEmail,
+    kinAddress: hasExplicitNoNextOfKin ? createEmptyAddress() : primaryNextOfKinProfile?.address || persona.kinAddress,
     lastCountry: persona.lastCountry,
     lastJob: persona.lastJob,
     arrivalDate: persona.arrivalDate,
@@ -408,6 +409,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const [statusRemark, setStatusRemark] = useState('')
   const [commentDraft, setCommentDraft] = useState('')
   const [replyToNoteId, setReplyToNoteId] = useState<string | null>(null)
+  const attachInputRef = useRef<HTMLInputElement | null>(null)
   const [activeVersionGroupId, setActiveVersionGroupId] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState('')
 
@@ -476,23 +478,19 @@ export default function ReferredCaseViewPage(): JSX.Element {
     },
     {
       key: 'action',
-      title: 'ACTION',
+      title: 'ACTIONS',
       className: 'w-[6%] whitespace-nowrap text-right align-top',
       render: (row) => (
         <button
           type="button"
-          onClick={() => {
-            setActiveReferralId(row.id)
-            setReplyToNoteId(null)
-            setCommentDraft('')
-          }}
+          onClick={() => navigate(`/agency/referrals/${row.id}`)}
           className={`px-2 min-h-[28px] text-[10px] font-bold rounded-[3px] border transition-colors ${
             activeReferralId === row.id
               ? 'bg-[#0b5384] text-white border-[#0b5384]'
               : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
           }`}
         >
-          {activeReferralId === row.id ? 'Active' : 'Open'}
+          {activeReferralId === row.id ? 'Viewing' : 'View'}
         </button>
       ),
     },
@@ -570,6 +568,55 @@ export default function ReferredCaseViewPage(): JSX.Element {
     setReplyToNoteId(null)
     setRefreshKey((prev) => prev + 1)
     setSaveMessage(`Saved ${nowLabel()}.`)
+  }
+
+  const attachDocumentsToReferral = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (!activeReferral || !files.length) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+
+    updateManagedReferral(activeReferral.id, (current) => {
+      const nextDocuments = [...(current.documents ?? [])]
+
+      files.forEach((file, index) => {
+        const attachmentId = `doc-${current.id}-attachment-${Date.now()}-${index}`
+        nextDocuments.push({
+          id: attachmentId,
+          name: file.name,
+          uploadedBy: agencyActor,
+          uploadedAt: nowIso,
+          versionGroupId: attachmentId,
+        })
+      })
+
+      return {
+        ...current,
+        documents: nextDocuments,
+        updatedAt: nowIso,
+      }
+    })
+
+    if (selectedReferral && activeReferral.id === selectedReferral.id) {
+      setTimeline((prev) => [
+        ...prev,
+        {
+          id: `${activeReferral.id}-agency-docs-attached-${Date.now()}`,
+          agency: agencyName,
+          title: 'Referral Documents Attached',
+          description: `${files.length} new referral document${files.length > 1 ? 's were' : ' was'} attached by Agency Focal.`,
+          time: nowLabel(),
+          actor: agencyActor,
+          logoSrc: agencyLogoSrc,
+        },
+      ])
+    }
+
+    setRefreshKey((prev) => prev + 1)
+    setSaveMessage(`Saved ${nowLabel()}.`)
+    event.target.value = ''
   }
 
   // Load case data fresh whenever caseId changes
@@ -773,7 +820,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] text-slate-600">
-                  View other agencies handling this case, their latest progress, and switch the active referral for comments.
+                  View other agencies handling this case, their latest progress, and open each referral's full details.
                 </p>
                 <span className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-slate-500">
                   {referralOverviewRows.length} Referral{referralOverviewRows.length === 1 ? '' : 's'}
@@ -793,6 +840,24 @@ export default function ReferredCaseViewPage(): JSX.Element {
 
           <SideCard title="DOCUMENTS">
             <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[2px] border border-[#d8dee8] bg-[#f8fafc] px-3 py-2">
+                <p className="text-[10px] text-slate-600">Attach additional files for this referral.</p>
+                <button
+                  type="button"
+                  onClick={() => attachInputRef.current?.click()}
+                  className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a]"
+                >
+                  Attach Document
+                </button>
+                <input
+                  ref={attachInputRef}
+                  type="file"
+                  multiple
+                  onChange={attachDocumentsToReferral}
+                  className="hidden"
+                />
+              </div>
+
               {serviceGroups.map((group) => {
                 const { matches: requirementMatches, unassignedDocuments } = matchRequirementsToDocuments(group.requiredDocuments, activeDocuments)
                 const attachedRequirementCount = requirementMatches.filter((match) => Boolean(match.document)).length

@@ -10,6 +10,7 @@ import {
   getCaseManagerAgencies,
   toCaseHealthStatus,
   type CaseManagerReferral,
+  type CaseManagerCase,
 } from '../../data/unifiedData'
 import {
   getManagedCaseById,
@@ -62,21 +63,7 @@ type CaseDocument = {
 }
 
 type CreatedCaseState = {
-  createdCase?: {
-    id: string
-    caseNo: string
-    clientName: string
-    clientType: 'Overseas Filipino Worker' | 'Next of Kin'
-    service: string
-    milestone: string
-    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
-    createdAt: string
-    updatedAt: string
-    agencyId: string
-    agencyShort: string
-    agencyName: string
-    caseNarrative?: string
-  }
+  createdCase?: CaseManagerCase
   toastMessage?: string
 }
 
@@ -272,7 +259,8 @@ export default function CaseViewPage(): JSX.Element {
   }
 
   const persona = getClientPersona(caseRecord.caseNo)
-  const hasExplicitNoNextOfKin = Boolean(caseRecord.ofwProfile) && !caseRecord.nextOfKinProfile
+  const primaryNextOfKinProfile = caseRecord.nextOfKinProfiles?.[0] || caseRecord.nextOfKinProfile
+  const hasExplicitNoNextOfKin = Boolean(caseRecord.ofwProfile) && !primaryNextOfKinProfile
   const ofwDetails = {
     fullName: caseRecord.ofwProfile?.fullName || persona.ofwName,
     birthDate: caseRecord.ofwProfile?.birthDate || persona.ofwBirth,
@@ -289,13 +277,13 @@ export default function CaseViewPage(): JSX.Element {
   const nextOfKinDetails = hasExplicitNoNextOfKin
     ? null
     : {
-        fullName: caseRecord.nextOfKinProfile?.fullName || persona.kinName,
-        relationship: caseRecord.nextOfKinProfile?.relationship === 'Other'
-          ? (caseRecord.nextOfKinProfile?.relationshipOther?.trim() || 'Other')
-          : (caseRecord.nextOfKinProfile?.relationship || '-'),
-        contact: caseRecord.nextOfKinProfile?.contact || persona.kinContact,
-        email: caseRecord.nextOfKinProfile?.email || persona.kinEmail,
-        address: caseRecord.nextOfKinProfile?.address || persona.kinAddress,
+        fullName: primaryNextOfKinProfile?.fullName || persona.kinName,
+        relationship: primaryNextOfKinProfile?.relationship === 'Other'
+          ? (primaryNextOfKinProfile?.relationshipOther?.trim() || 'Other')
+          : (primaryNextOfKinProfile?.relationship || '-'),
+        contact: primaryNextOfKinProfile?.contact || persona.kinContact,
+        email: primaryNextOfKinProfile?.email || persona.kinEmail,
+        address: primaryNextOfKinProfile?.address || persona.kinAddress,
       }
   const caseStatus = toCaseHealthStatus(caseRecord.status)
   const fallbackSpecialCategories = getSpecialCategories(caseRecord.caseNo)
@@ -304,7 +292,7 @@ export default function CaseViewPage(): JSX.Element {
   const nextOfKinSpecialCategories =
     hasExplicitNoNextOfKin
       ? []
-      : (caseRecord.nextOfKinProfile?.specialCategories || (caseRecord.clientType === 'Next of Kin' ? fallbackSpecialCategories : []))
+      : (primaryNextOfKinProfile?.specialCategories || (caseRecord.clientType === 'Next of Kin' ? fallbackSpecialCategories : []))
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false)
   const [editableClientType, setEditableClientType] = useState(caseRecord.clientType)
   const [editableNarrative, setEditableNarrative] = useState(
@@ -600,9 +588,7 @@ export default function CaseViewPage(): JSX.Element {
 
         <aside className="xl:col-span-4 space-y-4">
           <CardSection title="Case Narrative">
-            <p className="text-[12px] leading-5 text-slate-600">
-              {editableNarrative}
-            </p>
+            <p className="text-[12px] leading-5 text-slate-600 whitespace-pre-wrap">{editableNarrative}</p>
           </CardSection>
 
           <CardSection title="Case Timeline">

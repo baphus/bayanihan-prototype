@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import type { ElementType, JSX, ReactNode } from 'react'
-import { HelpCircle, LogOut } from 'lucide-react'
+import { HelpCircle, LogOut, Pencil } from 'lucide-react'
 
 export interface NavigationItem {
   name: string
@@ -27,14 +27,15 @@ interface AppSidebarProps {
   user: UserProfile
   onLogout?: () => void
   logo?: ReactNode
+  profileHref?: string
 }
 
-export default function AppSidebar({ navigation = [], navigationGroups, user, onLogout, logo }: AppSidebarProps): JSX.Element {
+export default function AppSidebar({ navigation = [], navigationGroups, user, onLogout, logo, profileHref }: AppSidebarProps): JSX.Element {
   const location = useLocation()
   const groupedNavigation = navigationGroups ?? [{ label: '', items: navigation }]
 
   return (
-    <aside className="w-64 bg-[#f8f9fa] border-r border-slate-200 hidden md:flex shrink-0 h-full font-body flex-col">
+    <aside className="w-64 bg-[#f8f9fa] border-r border-slate-200 hidden md:flex shrink-0 h-screen font-body flex-col">
       <div className="flex-1 min-h-0">
         {/* Logo Section */}
         <div className="h-24 flex items-center px-8 border-b border-transparent">
@@ -113,6 +114,16 @@ export default function AppSidebar({ navigation = [], navigationGroups, user, on
               <span className="text-[10px] font-bold tracking-[0.06em] text-slate-500 mt-0.5 whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis">{user.role}</span>
             </div>
           </div>
+          {profileHref ? (
+            <Link
+              to={profileHref}
+              className="text-slate-500 hover:text-[#0b5384] transition-colors ml-2"
+              title="Edit Profile"
+              aria-label="Edit Profile"
+            >
+              <Pencil className="w-[20px] h-[20px]" strokeWidth={2} />
+            </Link>
+          ) : null}
           <button 
             onClick={onLogout}
             className="text-red-500 hover:text-red-700 transition-colors ml-2" 

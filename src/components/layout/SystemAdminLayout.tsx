@@ -14,8 +14,9 @@ import {
 } from 'lucide-react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import type { JSX } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AppSidebar from './AppSidebar'
-import { clearActiveRole } from '../../utils/authSession'
+import { clearActiveRole, getActiveUserProfile, getRoleProfileLabel, subscribeToActiveUserProfile } from '../../utils/authSession'
 
 const navigationGroups = [
   {
@@ -52,6 +53,18 @@ const navigationGroups = [
 
 export default function SystemAdminLayout(): JSX.Element {
   const navigate = useNavigate()
+  const [activeProfile, setActiveProfile] = useState(() => getActiveUserProfile())
+
+  useEffect(() => {
+    return subscribeToActiveUserProfile(() => {
+      setActiveProfile(getActiveUserProfile())
+    })
+  }, [])
+
+  const initials = useMemo(() => {
+    const tokens = (activeProfile?.name || 'System Admin').trim().split(/\s+/).filter(Boolean)
+    return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() || '').join('') || 'SA'
+  }, [activeProfile?.name])
 
   const handleLogout = () => {
     clearActiveRole()
@@ -59,19 +72,21 @@ export default function SystemAdminLayout(): JSX.Element {
   }
 
   return (
-    <div className="flex h-screen bg-[#f1f4fa] font-sans">
+    <div className="flex h-screen overflow-hidden bg-[#f1f4fa] font-sans">
       <AppSidebar
         navigationGroups={navigationGroups}
         user={{
-          name: 'System Administrator',
-          role: 'Platform Governance',
-          initials: 'SA',
+          name: activeProfile?.name || 'System Administrator',
+          role: getRoleProfileLabel(activeProfile?.role || 'System Admin'),
+          initials,
+          avatarUrl: activeProfile?.avatarUrl,
         }}
+        profileHref="/system-admin/profile"
         onLogout={handleLogout}
       />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-8 pt-10">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto p-8 pt-10">
           <Outlet />
         </div>
       </main>

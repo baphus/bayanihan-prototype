@@ -35,10 +35,6 @@ export default function TrackYourCasePage() {
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-16 bg-gradient-to-b from-slate-50 to-slate-100">
         <div className="w-full max-w-3xl flex flex-col items-center text-center">
           
-          <div className="mb-6 inline-flex items-center gap-2 bg-[#Eef4fb] px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#0e5b8d] rounded-full border border-blue-100 shadow-sm">
-            <ShieldCheck className="w-3.5 h-3.5" /> Secure Tracking
-          </div>
-          
           <h1 className="mb-4 text-4xl sm:text-5xl font-black uppercase text-[#111827] tracking-tight">
             Track Your Case
           </h1>

@@ -1,8 +1,9 @@
 import { LayoutDashboard, BarChart3, History, Briefcase, ClipboardList } from 'lucide-react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import type { JSX } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AppSidebar from './AppSidebar'
-import { clearActiveRole } from '../../utils/authSession'
+import { clearActiveRole, getActiveUserProfile, getRoleProfileLabel, subscribeToActiveUserProfile } from '../../utils/authSession'
 
 const navigation = [
   { name: 'Dashboard', href: '/agency/dashboard', icon: LayoutDashboard },
@@ -14,6 +15,18 @@ const navigation = [
 
 export default function AgencyLayout(): JSX.Element {
   const navigate = useNavigate()
+  const [activeProfile, setActiveProfile] = useState(() => getActiveUserProfile())
+
+  useEffect(() => {
+    return subscribeToActiveUserProfile(() => {
+      setActiveProfile(getActiveUserProfile())
+    })
+  }, [])
+
+  const initials = useMemo(() => {
+    const tokens = (activeProfile?.name || 'Agency User').trim().split(/\s+/).filter(Boolean)
+    return tokens.slice(0, 2).map((token) => token[0]?.toUpperCase() || '').join('') || 'AF'
+  }, [activeProfile?.name])
 
   const handleLogout = () => {
     clearActiveRole()
@@ -25,10 +38,12 @@ export default function AgencyLayout(): JSX.Element {
       <AppSidebar 
         navigation={navigation} 
         user={{
-          name: 'Josephus Kim L. Sarsonas',
-          role: 'Overseas Workers Welfare Administration',
-          initials: 'JS',
+          name: activeProfile?.name || 'Josephus Kim L. Sarsonas',
+          role: getRoleProfileLabel(activeProfile?.role || 'Agency'),
+          initials,
+          avatarUrl: activeProfile?.avatarUrl,
         }}
+        profileHref="/agency/profile"
         onLogout={handleLogout}
       />
 

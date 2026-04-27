@@ -14,20 +14,41 @@ import {
   getStatusBreakdown,
   toCaseHealthStatus,
 } from '../../data/unifiedData'
-import { getManagedCases, getManagedLatestMilestone, getManagedReferrals } from '../../data/caseLifecycleStore'
+import { getManagedCases, getManagedReferrals } from '../../data/caseLifecycleStore'
 
-import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
 import NotificationBell from '../../components/ui/NotificationBell'
 
 type CaseRowData = {
   rowId: string
   caseNo: string
-  caseStatus: string
-  referralStatus: string
-  update: string
-  agency: string
-  agencyCode: string
-  agencyLogoUrl: string
+  clientName: string
+  clientType: string
+  createdOn: string
+  caseAge: string
+  referredTo: string
+}
+
+function formatCaseAge(timestamp: string): string {
+  const parsed = new Date(timestamp.replace(' ', 'T'))
+  if (Number.isNaN(parsed.getTime())) {
+    return 'N/A'
+  }
+
+  const ageInMs = Math.max(0, Date.now() - parsed.getTime())
+  const oneDayInMs = 24 * 60 * 60 * 1000
+  const ageInDays = Math.floor(ageInMs / oneDayInMs)
+
+  if (ageInDays > 0) {
+    return `${ageInDays} day${ageInDays === 1 ? '' : 's'}`
+  }
+
+  const ageInHours = Math.floor(ageInMs / (60 * 60 * 1000))
+  if (ageInHours > 0) {
+    return `${ageInHours} hr${ageInHours === 1 ? '' : 's'}`
+  }
+
+  const ageInMinutes = Math.floor(ageInMs / (60 * 1000))
+  return `${Math.max(1, ageInMinutes)} min`
 }
 
 export default function DashboardPage() {
@@ -65,28 +86,15 @@ export default function DashboardPage() {
 
   const recentCases: CaseRowData[] = sortedCases.slice(0, 5).map((item) => {
     const latestReferral = latestReferralByCaseId[item.id]
-    const latestMilestone = latestReferral ? getManagedLatestMilestone(latestReferral.id, '') : ''
-    const latestUpdateText = latestMilestone
-      ? `"${latestMilestone}"`
-      : latestReferral
-        ? latestReferral.status === 'PENDING'
-          ? '"Awaiting agency acceptance"'
-          : latestReferral.status === 'PROCESSING'
-            ? '"Referral is being processed"'
-            : latestReferral.status === 'COMPLETED'
-              ? '"Referral completed by agency"'
-              : '"Referral returned by agency"'
-        : `"${item.milestone}"`
 
     return {
       rowId: item.id,
       caseNo: item.caseNo,
-      caseStatus: toCaseHealthStatus(item.status),
-      referralStatus: latestReferral?.status ?? item.status,
-      update: latestUpdateText,
-      agency: latestReferral?.agencyName ?? item.agencyName,
-      agencyCode: item.agencyShort,
-      agencyLogoUrl: agenciesById[(latestReferral?.agencyId ?? item.agencyId)]?.logoUrl ?? '/logo.png',
+      clientName: item.clientName,
+      clientType: item.clientType,
+      createdOn: formatDisplayDate(item.createdAt),
+      caseAge: formatCaseAge(item.createdAt),
+      referredTo: latestReferral?.agencyName ?? item.agencyName,
     }
   })
 
@@ -272,63 +280,29 @@ export default function DashboardPage() {
       render: (row) => <span className="text-xs text-slate-900 font-body">{row.caseNo}</span>
     },
     {
-      key: 'caseStatus',
-      title: 'CASE STATUS',
-      render: (row) => {
-        const isOpen = row.caseStatus === 'OPEN'
-        return (
-          <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded ${isOpen ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-600'}`}>
-            {row.caseStatus}
-          </span>
-        )
-      }
+      key: 'clientName',
+      title: 'CLIENT NAME',
+      render: (row) => <span className="text-xs text-slate-900 font-body">{row.clientName}</span>
     },
     {
-      key: 'referralStatus',
-      title: 'REF. STATUS',
-      render: (row) => {
-        return (
-          <span className={`inline-flex rounded-[2px] border px-2 py-1 text-[9px] font-bold uppercase tracking-widest ${getStatusBadgeClass(row.referralStatus as any)}`}>
-            {row.referralStatus}
-          </span>
-        )
-      }
+      key: 'clientType',
+      title: 'CLIENT TYPE',
+      render: (row) => <span className="text-xs text-slate-900 font-body">{row.clientType}</span>
     },
     {
-      key: 'agency',
-      title: 'REFERRED AGENCY',
-      render: (row) => (
-        <span className="flex items-center justify-center" title={row.agency}>
-          <div className="h-6 w-6 overflow-hidden rounded-full border border-white bg-white shadow-sm">
-            <img src={row.agencyLogoUrl} alt={row.agencyCode} className="h-full w-full object-contain p-[1px]" />
-          </div>
-        </span>
-      )
+      key: 'createdOn',
+      title: 'CREATED ON',
+      render: (row) => <span className="text-xs text-slate-900 font-body">{row.createdOn}</span>
     },
     {
-      key: 'update',
-      title: 'LATEST UPDATE',
-      render: (row) => (
-        <span className="flex items-center gap-1.5 text-xs text-slate-500 font-body">
-          <div className="h-3 w-3 overflow-hidden rounded-full border border-white bg-white shadow-sm">
-            <img src={row.agencyLogoUrl} alt={row.agencyCode} className="h-full w-full object-contain" />
-          </div>
-          <span>{row.update}</span>
-        </span>
-      )
+      key: 'caseAge',
+      title: 'CASE AGE',
+      render: (row) => <span className="text-xs text-slate-900 font-body">{row.caseAge}</span>
     },
     {
-      key: 'action',
-      title: 'ACTION',
-      className: 'text-right',
-      render: (row) => (
-        <button
-          onClick={() => navigate(`/case-manager/cases/${row.rowId}`)}
-          className="text-[11px] font-bold font-label text-blue-900 px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 transition-all outline-none"
-        >
-          View
-        </button>
-      )
+      key: 'referredTo',
+      title: 'REFERRED TO',
+      render: (row) => <span className="text-xs text-slate-900 font-body">{row.referredTo}</span>
     }
   ]
 

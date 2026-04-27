@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode 
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { getStatusBadgeClass } from '../agency/statusBadgeStyles'
-import { formatDisplayDateTime, getAgencyFocalByAgencyId, getCaseManagerAgencies, type CaseManagerReferral, type CaseManagerReferralNote } from '../../data/unifiedData'
+import { formatDisplayDateTime, getAgencyFocalByAgencyId, getCaseManagerAgencies, getStakeholderServiceDetails, type CaseManagerReferral, type CaseManagerReferralNote } from '../../data/unifiedData'
 import { getManagedReferralById, updateManagedReferral } from '../../data/caseLifecycleStore'
 import CaseCommentsThread from '../../components/ui/CaseCommentsThread'
 
@@ -59,6 +59,79 @@ function getReferralNotesHistory(referral: CaseManagerReferral): CaseManagerRefe
   return normalized
     .filter((note) => note.content.length > 0)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+}
+
+type ReferralDocument = NonNullable<CaseManagerReferral['documents']>[number]
+
+function normalizeDocumentMatchValue(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+function getRequirementMatchScore(requirement: string, documentName: string): number {
+  const normalizedRequirement = normalizeDocumentMatchValue(requirement)
+  const normalizedDocumentName = normalizeDocumentMatchValue(documentName)
+
+  if (!normalizedRequirement || !normalizedDocumentName) {
+    return 0
+  }
+
+  if (normalizedDocumentName.includes(normalizedRequirement)) {
+    return 100
+  }
+
+  const requirementKeywords = normalizedRequirement.split(' ').filter((token) => token.length >= 4)
+  if (!requirementKeywords.length) {
+    return normalizedDocumentName.includes(normalizedRequirement) ? 1 : 0
+  }
+
+  return requirementKeywords.reduce((score, keyword) => {
+    return normalizedDocumentName.includes(keyword) ? score + 1 : score
+  }, 0)
+}
+
+function matchRequirementsToDocuments(requirements: string[], documents: ReferralDocument[]): {
+  matches: Array<{ requirement: string; document: ReferralDocument | null }>
+  unassignedDocuments: ReferralDocument[]
+} {
+  const remainingDocuments = [...documents]
+
+  const matches = requirements.map((requirement, requirementIndex) => {
+    let bestIndex = -1
+    let bestScore = 0
+
+    remainingDocuments.forEach((doc, index) => {
+      const score = getRequirementMatchScore(requirement, doc.name)
+      if (score > bestScore) {
+        bestScore = score
+        bestIndex = index
+      }
+    })
+
+    if (bestIndex === -1 && requirementIndex < remainingDocuments.length) {
+      bestIndex = requirementIndex
+    }
+
+    const matchedDocument = bestIndex >= 0 ? remainingDocuments.splice(bestIndex, 1)[0] : null
+
+    return {
+      requirement,
+      document: matchedDocument,
+    }
+  })
+
+  return {
+    matches,
+    unassignedDocuments: remainingDocuments,
+  }
+}
+
+function parseReferredServices(serviceValue: string): string[] {
+  const normalized = serviceValue
+    .split(/[,;]+/)
+    .map((service) => service.trim())
+    .filter(Boolean)
+
+  return normalized.length ? normalized : [serviceValue.trim()].filter(Boolean)
 }
 
 function buildReferralTimeline(referral: CaseManagerReferral): TimelineItem[] {
@@ -135,6 +208,11 @@ export default function ReferralViewPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { referralId = '' } = useParams()
+  const referralListPath = location.pathname.startsWith('/agency')
+    ? '/agency/referred-cases'
+    : location.pathname.startsWith('/system-admin')
+      ? '/system-admin/referrals'
+      : '/case-manager/referrals'
 
   const routeReferral = (location.state as { referral?: CaseManagerReferral } | null)?.referral
   const resolvedReferral = useMemo(() => {
@@ -156,9 +234,12 @@ export default function ReferralViewPage() {
     return latestCaseManagerNote?.content ?? resolvedReferral.notes
   })
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const attachInputRef = useRef<HTMLInputElement | null>(null)
   const [isAddNoteOpen, setIsAddNoteOpen] = useState(false)
   const [pendingNote, setPendingNote] = useState<string | null>(null)
+  const [pendingReplyToNoteId, setPendingReplyToNoteId] = useState<string | null>(null)
   const [pendingReplacements, setPendingReplacements] = useState<Record<string, File>>({})
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([])
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [activeVersionGroupId, setActiveVersionGroupId] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState('')
@@ -170,7 +251,9 @@ export default function ReferralViewPage() {
       setNotesDraft('')
       setIsAddNoteOpen(false)
       setPendingNote(null)
+      setPendingReplyToNoteId(null)
       setPendingReplacements({})
+      setPendingAttachments([])
       setIsConfirmModalOpen(false)
       setActiveVersionGroupId(null)
       setSaveMessage('')
@@ -183,7 +266,9 @@ export default function ReferralViewPage() {
     setNotesDraft(latestCaseManagerNote?.content ?? resolvedReferral.notes)
     setIsAddNoteOpen(false)
     setPendingNote(null)
+    setPendingReplyToNoteId(null)
     setPendingReplacements({})
+    setPendingAttachments([])
     setIsConfirmModalOpen(false)
     setActiveVersionGroupId(null)
     setSaveMessage('')
@@ -194,7 +279,7 @@ export default function ReferralViewPage() {
       <div className="mx-auto max-w-4xl space-y-4 pb-6">
         <button
           type="button"
-          onClick={() => navigate('/case-manager/referrals')}
+          onClick={() => navigate(referralListPath)}
           className="inline-flex items-center gap-1 text-[12px] font-bold text-slate-600 hover:text-slate-800"
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
@@ -210,22 +295,59 @@ export default function ReferralViewPage() {
   const orderedTimeline = [...timeline].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
   const documents = referral.documents ?? []
   const activeDocuments = documents.filter((doc) => !doc.archived)
+  const stakeholderServiceDetails = getStakeholderServiceDetails(referral.agencyId)
+  const referredServices = parseReferredServices(referral.service)
+  const serviceRequirementGroups = referredServices.map((serviceTitle) => {
+    const matchedServiceDetail = stakeholderServiceDetails.find(
+      (serviceDetail) => serviceDetail.title.toLowerCase() === serviceTitle.toLowerCase(),
+    )
+
+    return {
+      serviceTitle,
+      requiredDocuments: matchedServiceDetail?.requiredDocuments ?? [],
+    }
+  })
+  const groupedRequirements = useMemo(() => {
+    const initial = {
+      groups: [] as Array<{
+        serviceTitle: string
+        requiredDocuments: string[]
+        matches: Array<{ requirement: string; document: ReferralDocument | null }>
+      }>,
+      unassignedDocuments: [...activeDocuments],
+    }
+
+    return serviceRequirementGroups.reduce((acc, group) => {
+      const { matches, unassignedDocuments } = matchRequirementsToDocuments(group.requiredDocuments, acc.unassignedDocuments)
+
+      return {
+        groups: [...acc.groups, { ...group, matches }],
+        unassignedDocuments,
+      }
+    }, initial)
+  }, [activeDocuments, serviceRequirementGroups])
   const notesHistory = getReferralNotesHistory(referral)
   const mostRecentCaseManagerNote = notesHistory.find((note) => note.createdBy.includes('Case Manager'))
   const latestNoteText = mostRecentCaseManagerNote?.content ?? referral.notes?.trim() ?? ''
   const pendingNoteValue = pendingNote?.trim() ?? ''
-  const hasPendingChanges = Boolean(pendingNoteValue) || Object.keys(pendingReplacements).length > 0
+  const replyToNote = pendingReplyToNoteId
+    ? notesHistory.find((note) => note.id === pendingReplyToNoteId) ?? null
+    : null
+  const hasPendingChanges = Boolean(pendingNoteValue) || Object.keys(pendingReplacements).length > 0 || pendingAttachments.length > 0
   const documentVersionRows = activeVersionGroupId
     ? documents
         .filter((doc) => (doc.versionGroupId ?? doc.id) === activeVersionGroupId)
         .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
     : []
   const pendingChangeSummary = [
-    pendingNoteValue ? `Add comment: "${pendingNoteValue.slice(0, 90)}${pendingNoteValue.length > 90 ? '...' : ''}"` : null,
+    pendingNoteValue
+      ? `${replyToNote ? `Add reply to ${replyToNote.createdBy}` : 'Add comment'}: "${pendingNoteValue.slice(0, 90)}${pendingNoteValue.length > 90 ? '...' : ''}"`
+      : null,
     ...Object.entries(pendingReplacements).map(([docId, file]) => {
       const targetDoc = activeDocuments.find((doc) => doc.id === docId)
       return `Replace document: ${targetDoc?.name ?? 'Unknown document'} -> ${file.name}`
     }),
+    ...pendingAttachments.map((file) => `Attach document: ${file.name}`),
   ].filter((item): item is string => Boolean(item))
 
   const handleDocumentSelect = (event: ChangeEvent<HTMLInputElement>) => {
@@ -242,9 +364,23 @@ export default function ReferralViewPage() {
     event.target.value = ''
   }
 
+  const handleAttachDocumentsSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (!files.length) {
+      return
+    }
+
+    setPendingAttachments((prev) => [...prev, ...files])
+    event.target.value = ''
+  }
+
+  const removePendingAttachment = (index: number) => {
+    setPendingAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+  }
+
   const queueNote = () => {
     const trimmed = notesDraft.trim()
-    if (!trimmed || trimmed === latestNoteText.trim()) {
+    if (!trimmed || (!pendingReplyToNoteId && trimmed === latestNoteText.trim())) {
       return
     }
 
@@ -254,7 +390,9 @@ export default function ReferralViewPage() {
 
   const discardPendingChanges = () => {
     setPendingNote(null)
+    setPendingReplyToNoteId(null)
     setPendingReplacements({})
+    setPendingAttachments([])
     setIsConfirmModalOpen(false)
     setNotesDraft(latestNoteText)
   }
@@ -273,8 +411,10 @@ export default function ReferralViewPage() {
         id: `${referral.id}-notes-${Date.now()}`,
         actorType: 'Case Manager',
         logoType: 'bayanihan',
-        title: 'Case Comment Added',
-        description: 'A new case comment was added by the Case Manager.',
+        title: replyToNote ? 'Case Reply Added' : 'Case Comment Added',
+        description: replyToNote
+          ? `A reply was posted by the Case Manager to ${replyToNote.createdBy}.`
+          : 'A new case comment was added by the Case Manager.',
         timestamp: nowIso,
         actor: CASE_MANAGER_ACTOR,
       })
@@ -287,6 +427,18 @@ export default function ReferralViewPage() {
         logoType: 'bayanihan',
         title: 'Referral Documents Replaced',
         description: `${Object.keys(pendingReplacements).length} referral document${Object.keys(pendingReplacements).length > 1 ? 's were' : ' was'} replaced by the Case Manager.`,
+        timestamp: nowIso,
+        actor: CASE_MANAGER_ACTOR,
+      })
+    }
+
+    if (pendingAttachments.length > 0) {
+      nextTimeline.push({
+        id: `${referral.id}-docs-attached-${Date.now()}`,
+        actorType: 'Case Manager',
+        logoType: 'bayanihan',
+        title: 'Referral Documents Attached',
+        description: `${pendingAttachments.length} new referral document${pendingAttachments.length > 1 ? 's were' : ' was'} attached by the Case Manager.`,
         timestamp: nowIso,
         actor: CASE_MANAGER_ACTOR,
       })
@@ -305,6 +457,7 @@ export default function ReferralViewPage() {
               content: pendingNoteValue,
               createdAt: nowIso,
               createdBy: CASE_MANAGER_ACTOR,
+              parentNoteId: replyToNote?.id,
             },
           ]
         : prev.noteHistory
@@ -337,6 +490,18 @@ export default function ReferralViewPage() {
         })
       })
 
+      pendingAttachments.forEach((file, index) => {
+        const attachmentId = `doc-${prev.id}-attachment-${Date.now()}-${index}`
+
+        nextDocuments.push({
+          id: attachmentId,
+          name: file.name,
+          uploadedBy: CASE_MANAGER_ACTOR,
+          uploadedAt: nowIso,
+          versionGroupId: attachmentId,
+        })
+      })
+
       const updatedReferral = {
         ...prev,
         notes: pendingNoteValue || prev.notes,
@@ -351,7 +516,9 @@ export default function ReferralViewPage() {
     })
     setTimeline(nextTimeline)
     setPendingNote(null)
+    setPendingReplyToNoteId(null)
     setPendingReplacements({})
+    setPendingAttachments([])
     setIsConfirmModalOpen(false)
     setNotesDraft('')
     setSaveMessage(`Saved ${formatDisplayDateTime(nowIso)}.`)
@@ -360,7 +527,7 @@ export default function ReferralViewPage() {
   return (
     <div className="max-w-[1240px] mx-auto px-4 py-6 space-y-4">
       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-        <Link to="/case-manager/referrals" className="hover:text-[#0b5384] transition">Referrals</Link>
+        <Link to={referralListPath} className="hover:text-[#0b5384] transition">Referrals</Link>
         <span className="mx-2">&gt;</span>
         <span>{referral.caseNo}</span>
       </div>
@@ -369,7 +536,7 @@ export default function ReferralViewPage() {
         <h1 className={pageHeadingStyles.pageTitle}>Referral Details</h1>
         <button
           type="button"
-          onClick={() => navigate('/case-manager/referrals')}
+          onClick={() => navigate(referralListPath)}
           className="h-[34px] px-3 border border-[#cbd5e1] bg-white text-slate-700 text-[11px] font-bold rounded-[3px] hover:bg-slate-50"
         >
           Back
@@ -390,49 +557,174 @@ export default function ReferralViewPage() {
           </section>
 
           <SectionCard title="Attached Documents">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] px-3 py-2">
+              <p className="text-[10px] text-slate-600">Attach additional files for this referral.</p>
+              <button
+                type="button"
+                onClick={() => attachInputRef.current?.click()}
+                className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a]"
+              >
+                Attach Document
+              </button>
+              <input
+                ref={attachInputRef}
+                type="file"
+                multiple
+                onChange={handleAttachDocumentsSelect}
+                className="hidden"
+              />
+            </div>
+
+            {pendingAttachments.length ? (
+              <div className="mb-3 rounded-[3px] border border-amber-200 bg-amber-50 px-3 py-2 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending Attachments</p>
+                <div className="space-y-1.5">
+                  {pendingAttachments.map((file, index) => (
+                    <div key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-2 rounded-[2px] border border-amber-200 bg-white px-2 py-1.5">
+                      <p className="min-w-0 truncate text-[11px] text-slate-700">{file.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => removePendingAttachment(index)}
+                        className="text-[10px] font-semibold text-amber-700 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {activeDocuments.length ? (
-              <div className="space-y-2">
-                {activeDocuments.map((doc) => (
-                  <div key={doc.id} className="bg-[#f5f7fb] border border-[#e2e8f0] p-3 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
-                      <p className="text-[9px] text-slate-400 truncate">
-                        {doc.uploadedBy} • {formatDisplayDateTime(doc.uploadedAt)}
-                      </p>
-                      {pendingReplacements[doc.id] ? (
-                        <p className="mt-1 text-[10px] font-semibold text-amber-700">
-                          Pending replacement: {pendingReplacements[doc.id].name}
-                        </p>
-                      ) : null}
+              <div className="space-y-3">
+                {groupedRequirements.groups.map((group) => {
+                  const attachedRequirementCount = group.matches.filter((match) => Boolean(match.document)).length
+
+                  return (
+                    <div key={group.serviceTitle} className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#334155]">{group.serviceTitle}</h4>
+                        <span className="text-[10px] font-bold text-slate-500">
+                          Requirements Attached: {attachedRequirementCount}/{group.requiredDocuments.length}
+                        </span>
+                      </div>
+
+                      {group.requiredDocuments.length ? (
+                        <div className="space-y-2">
+                          {group.matches.map(({ requirement, document }) => {
+                            const isAttached = Boolean(document)
+
+                            return (
+                              <div key={`${group.serviceTitle}-${requirement}`} className="rounded-[2px] border border-[#e2e8f0] bg-white px-2.5 py-2">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <p className="text-[11px] text-slate-700">{requirement}</p>
+                                  <span
+                                    className={`inline-flex items-center rounded-[2px] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
+                                      isAttached
+                                        ? 'bg-[#ecfdf5] text-[#166534] border border-[#86efac]'
+                                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    }`}
+                                  >
+                                    {isAttached ? 'Attached' : 'Missing'}
+                                  </span>
+                                </div>
+
+                                {document ? (
+                                  <div className="mt-1.5 flex items-center justify-between gap-3 rounded-[2px] border border-[#dbeafe] bg-[#eff6ff] px-2 py-1.5">
+                                    <div className="min-w-0">
+                                      <p className="text-[10px] font-bold text-[#0b5384] truncate">{document.name}</p>
+                                      <p className="text-[9px] text-slate-500 truncate">{document.uploadedBy} • {formatDisplayDateTime(document.uploadedAt)}</p>
+                                      {pendingReplacements[document.id] ? (
+                                        <p className="mt-1 text-[10px] font-semibold text-amber-700">
+                                          Pending replacement: {pendingReplacements[document.id].name}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveVersionGroupId(document.versionGroupId ?? document.id)}
+                                        className="text-[10px] text-slate-600 font-bold hover:underline"
+                                      >
+                                        View Versions
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => fileInputRefs.current[document.id]?.click()}
+                                        className="text-[10px] text-[#0b5384] font-bold hover:underline"
+                                      >
+                                        Replace Document
+                                      </button>
+                                      <input
+                                        ref={(element) => {
+                                          fileInputRefs.current[document.id] = element
+                                        }}
+                                        data-doc-id={document.id}
+                                        type="file"
+                                        onChange={handleDocumentSelect}
+                                        className="hidden"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-500">No required documents configured for this referred service.</p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveVersionGroupId(doc.versionGroupId ?? doc.id)}
-                        className="text-[10px] text-slate-600 font-bold hover:underline"
-                      >
-                        View Versions
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => fileInputRefs.current[doc.id]?.click()}
-                        className="text-[10px] text-[#0b5384] font-bold hover:underline"
-                      >
-                        Replace Document
-                      </button>
-                      <input
-                        ref={(element) => {
-                          fileInputRefs.current[doc.id] = element
-                        }}
-                        data-doc-id={doc.id}
-                        type="file"
-                        onChange={handleDocumentSelect}
-                        className="hidden"
-                      />
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
+
+                <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3 space-y-2">
+                  <h4 className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-500">Other Attached Files</h4>
+                  {groupedRequirements.unassignedDocuments.length ? (
+                    groupedRequirements.unassignedDocuments.map((doc) => (
+                      <div key={doc.id} className="bg-white border border-[#e2e8f0] p-2.5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
+                          <p className="text-[9px] text-slate-400 truncate">{doc.uploadedBy} • {formatDisplayDateTime(doc.uploadedAt)}</p>
+                          {pendingReplacements[doc.id] ? (
+                            <p className="mt-1 text-[10px] font-semibold text-amber-700">
+                              Pending replacement: {pendingReplacements[doc.id].name}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveVersionGroupId(doc.versionGroupId ?? doc.id)}
+                            className="text-[10px] text-slate-600 font-bold hover:underline"
+                          >
+                            View Versions
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRefs.current[doc.id]?.click()}
+                            className="text-[10px] text-[#0b5384] font-bold hover:underline"
+                          >
+                            Replace Document
+                          </button>
+                          <input
+                            ref={(element) => {
+                              fileInputRefs.current[doc.id] = element
+                            }}
+                            data-doc-id={doc.id}
+                            type="file"
+                            onChange={handleDocumentSelect}
+                            className="hidden"
+                          />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[11px] text-slate-500">No additional files outside mapped requirements.</p>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="border border-dashed border-[#cbd5e1] rounded-[3px] p-4 text-center">
@@ -473,19 +765,31 @@ export default function ReferralViewPage() {
                 onClick={() => setIsAddNoteOpen((prev) => !prev)}
                 className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a]"
               >
-                Add Comment
+                {pendingReplyToNoteId ? 'Reply' : 'Add Comment'}
               </button>
             </div>
 
             <div className="max-h-[340px] border border-[#d8dee8] bg-[#f8fafc] p-3 overflow-y-auto">
               {isAddNoteOpen ? (
                 <div className="mb-3 space-y-2 border border-[#d8dee8] bg-white p-3">
+                  {replyToNote ? (
+                    <div className="flex items-center justify-between gap-2 rounded-[2px] border border-[#d8dee8] bg-[#f8fafc] px-2.5 py-1.5">
+                      <p className="text-[10px] text-slate-600">Replying to {replyToNote.createdBy}</p>
+                      <button
+                        type="button"
+                        onClick={() => setPendingReplyToNoteId(null)}
+                        className="text-[10px] font-semibold text-slate-600 hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : null}
                   <textarea
                     value={notesDraft}
                     onChange={(event) => setNotesDraft(event.target.value)}
                     rows={3}
                     className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[12px] text-slate-700 outline-none focus:border-[#0b5384]"
-                    placeholder="Write a case comment"
+                    placeholder={replyToNote ? 'Write a case reply' : 'Write a case comment'}
                   />
                   <div className="flex items-center justify-end gap-2">
                     <button
@@ -493,6 +797,7 @@ export default function ReferralViewPage() {
                       onClick={() => {
                         setIsAddNoteOpen(false)
                         setNotesDraft(latestNoteText)
+                        setPendingReplyToNoteId(null)
                       }}
                       className="h-[28px] px-3 border border-[#cbd5e1] bg-white text-slate-700 text-[10px] font-bold rounded-[3px] hover:bg-slate-50"
                     >
@@ -503,7 +808,7 @@ export default function ReferralViewPage() {
                       onClick={queueNote}
                       className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a]"
                     >
-                      Queue Comment
+                      {replyToNote ? 'Queue Reply' : 'Queue Comment'}
                     </button>
                   </div>
                 </div>
@@ -511,12 +816,21 @@ export default function ReferralViewPage() {
 
               {pendingNoteValue ? (
                 <div className="mb-3 rounded-[3px] border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">Pending Comment</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-700">{replyToNote ? 'Pending Reply' : 'Pending Comment'}</p>
+                  {replyToNote ? <p className="mt-1 text-[10px] text-amber-700">Replying to {replyToNote.createdBy}</p> : null}
                   <p className="mt-1 text-[11px] text-amber-900">{pendingNoteValue}</p>
                 </div>
               ) : null}
 
-              <CaseCommentsThread notes={notesHistory} mostRecentCaseManagerNoteId={mostRecentCaseManagerNote?.id} />
+              <CaseCommentsThread
+                notes={notesHistory}
+                mostRecentCaseManagerNoteId={mostRecentCaseManagerNote?.id}
+                onReply={(note) => {
+                  setPendingReplyToNoteId(note.id)
+                  setIsAddNoteOpen(true)
+                  setNotesDraft('')
+                }}
+              />
             </div>
           </section>
         </aside>

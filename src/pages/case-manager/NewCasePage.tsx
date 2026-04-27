@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Check, ChevronRight, ChevronLeft, Plus, Trash2 } from 'lucide-react'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { AppButton } from '../../components/ui/AppButton'
 import AddressFieldGroup from '../../components/ui/AddressFieldGroup'
@@ -12,6 +12,7 @@ import {
   formatPersonName,
   getExistingClientProfile,
   toCaseHealthStatus,
+  type AddressParts,
 } from '../../data/unifiedData'
 import { createManagedCase, getManagedCases } from '../../data/caseLifecycleStore'
 
@@ -22,6 +23,16 @@ type NameParts = {
   middleInitial: string
   lastName: string
   suffix: string
+}
+
+type NextOfKinEntryForm = {
+  id: string
+  nameParts: NameParts
+  relationshipToOfw: string
+  relationshipOther: string
+  contact: string
+  email: string
+  address: AddressParts
 }
 
 const NAME_SUFFIX_OPTIONS = ['', 'Jr', 'Sr', 'II', 'III', 'IV', 'V']
@@ -90,6 +101,23 @@ function generateCaseId(): string {
   const d = `${now.getDate()}`.padStart(2, '0')
   const suffix = `${Math.floor(Math.random() * 9000) + 1000}`
   return `CM-${y}${m}${d}-${suffix}`
+}
+
+function createEmptyNextOfKinEntry(): NextOfKinEntryForm {
+  return {
+    id: `nok-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    nameParts: {
+      firstName: '',
+      middleInitial: '',
+      lastName: '',
+      suffix: '',
+    },
+    relationshipToOfw: '',
+    relationshipOther: '',
+    contact: '',
+    email: '',
+    address: createEmptyAddressParts(),
+  }
 }
 
 export default function NewCasePage() {
@@ -167,21 +195,12 @@ export default function NewCasePage() {
   const [specialPwd, setSpecialPwd] = useState(false)
   const [specialSoloParent, setSpecialSoloParent] = useState(false)
   const [hasNextOfKin, setHasNextOfKin] = useState<boolean>(true)
-  const [kinNameParts, setKinNameParts] = useState<NameParts>({
-    firstName: '',
-    middleInitial: '',
-    lastName: '',
-    suffix: '',
-  })
-  const [kinContact, setKinContact] = useState('')
-  const [kinEmail, setKinEmail] = useState('')
-  const [kinAddress, setKinAddress] = useState(createEmptyAddressParts)
-  const [kinRelationship, setKinRelationship] = useState('')
-  const [kinRelationshipOther, setKinRelationshipOther] = useState('')
+  const [nextOfKinEntries, setNextOfKinEntries] = useState<NextOfKinEntryForm[]>([createEmptyNextOfKinEntry()])
   const [lastCountry, setLastCountry] = useState('')
   const [lastJobPosition, setLastJobPosition] = useState('')
   const [arrivalDate, setArrivalDate] = useState('')
   const [caseNarrative, setCaseNarrative] = useState('')
+  const [newClientDataConsent, setNewClientDataConsent] = useState(false)
   const [isCreateConfirmOpen, setIsCreateConfirmOpen] = useState(false)
 
   const selectedExistingClient = existingClients.find((item) => item.id === selectedExistingClientId)
@@ -192,6 +211,7 @@ export default function NewCasePage() {
 
   useEffect(() => {
     if (clientSource === 'new') {
+      setNewClientDataConsent(false)
       setOfwNameParts({ firstName: '', middleInitial: '', lastName: '', suffix: '' })
       setOfwBirthDate('')
       setOfwGender('Male')
@@ -202,12 +222,7 @@ export default function NewCasePage() {
       setLastJobPosition('')
       setArrivalDate('')
       setHasNextOfKin(true)
-      setKinNameParts({ firstName: '', middleInitial: '', lastName: '', suffix: '' })
-      setKinContact('')
-      setKinEmail('')
-      setKinAddress(createEmptyAddressParts())
-      setKinRelationship('')
-      setKinRelationshipOther('')
+      setNextOfKinEntries([createEmptyNextOfKinEntry()])
       setSpecialSenior(false)
       setSpecialPwd(false)
       setSpecialSoloParent(false)
@@ -217,6 +232,8 @@ export default function NewCasePage() {
     if (!selectedExistingClientProfile) {
       return
     }
+
+    setNewClientDataConsent(false)
 
     setOfwNameParts(splitNameParts(selectedExistingClientProfile.fullName))
     setOfwBirthDate(selectedExistingClientProfile.birthDate)
@@ -228,26 +245,33 @@ export default function NewCasePage() {
     setLastJobPosition(selectedExistingClientProfile.lastJob)
     setArrivalDate(selectedExistingClientProfile.arrivalDate)
     setHasNextOfKin(selectedExistingClientProfile.hasNextOfKin)
-    setKinNameParts(splitNameParts(selectedExistingClientProfile.kinName))
-    setKinContact(selectedExistingClientProfile.kinContact)
-    setKinEmail(selectedExistingClientProfile.kinEmail)
-    setKinAddress({ ...selectedExistingClientProfile.kinAddress })
-    setKinRelationship('')
-    setKinRelationshipOther('')
+    setNextOfKinEntries(
+      selectedExistingClientProfile.hasNextOfKin
+        ? [
+            {
+              id: `nok-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              nameParts: splitNameParts(selectedExistingClientProfile.kinName),
+              relationshipToOfw: '',
+              relationshipOther: '',
+              contact: selectedExistingClientProfile.kinContact,
+              email: selectedExistingClientProfile.kinEmail,
+              address: { ...selectedExistingClientProfile.kinAddress },
+            },
+          ]
+        : [createEmptyNextOfKinEntry()],
+    )
   }, [clientSource, selectedExistingClientProfile])
 
   useEffect(() => {
-    if (hasNextOfKin) {
+    if (!hasNextOfKin) {
+      setNextOfKinEntries([createEmptyNextOfKinEntry()])
       return
     }
 
-    setKinNameParts({ firstName: '', middleInitial: '', lastName: '', suffix: '' })
-    setKinContact('')
-    setKinEmail('')
-    setKinAddress(createEmptyAddressParts())
-    setKinRelationship('')
-    setKinRelationshipOther('')
-  }, [hasNextOfKin])
+    if (nextOfKinEntries.length === 0) {
+      setNextOfKinEntries([createEmptyNextOfKinEntry()])
+    }
+  }, [hasNextOfKin, nextOfKinEntries.length])
 
   const canProceedToNextStep = () => {
     if (currentStep === 1) return true
@@ -261,14 +285,181 @@ export default function NewCasePage() {
 
   const canSubmit = currentStep === 3 && (clientSource === 'existing'
     ? selectedExistingClientId.trim().length > 0
-    : ofwNameParts.firstName.trim().length > 0 && ofwNameParts.lastName.trim().length > 0)
+    : ofwNameParts.firstName.trim().length > 0 && ofwNameParts.lastName.trim().length > 0 && newClientDataConsent)
 
   const ofwDisplayName = composeNameParts(ofwNameParts).trim() || selectedExistingClient?.clientName || 'Unnamed Client'
-  const kinDisplayName = composeNameParts(kinNameParts).trim()
-  const kinRelationshipDisplay = kinRelationship === 'Other'
-    ? (kinRelationshipOther.trim() || 'Other')
-    : (kinRelationship || 'Not yet provided')
-  const caseNarrativePreview = caseNarrative.trim()
+  const normalizedNextOfKinProfiles = hasNextOfKin
+    ? nextOfKinEntries.map((entry) => ({
+        fullName: composeNameParts(entry.nameParts),
+        relationship: entry.relationshipToOfw,
+        relationshipOther: entry.relationshipToOfw === 'Other' ? entry.relationshipOther.trim() : '',
+        contact: entry.contact,
+        email: entry.email,
+        address: { ...entry.address },
+        specialCategories: [
+          specialSenior ? 'Senior Citizen' : '',
+          specialPwd ? 'PWD' : '',
+          specialSoloParent ? 'Solo Parent' : '',
+        ].filter(Boolean) as string[],
+      }))
+    : []
+  const nextOfKinSummary = hasNextOfKin
+    ? (() => {
+        const names = normalizedNextOfKinProfiles
+          .map((entry) => formatPersonName(entry.fullName))
+          .filter((item) => item.length > 0)
+        return names.length > 0 ? names.join(', ') : 'Not yet provided'
+      })()
+    : 'No next of kin indicated'
+  const nextOfKinRelationshipSummary = hasNextOfKin
+    ? (() => {
+        const relations = normalizedNextOfKinProfiles
+          .map((entry) => entry.relationship === 'Other' ? (entry.relationshipOther || 'Other') : (entry.relationship || 'Not yet provided'))
+          .filter((item) => item.length > 0)
+        return relations.length > 0 ? relations.join(', ') : 'Not yet provided'
+      })()
+    : 'No next of kin indicated'
+
+  const updateNextOfKinEntry = (entryId: string, updater: (entry: NextOfKinEntryForm) => NextOfKinEntryForm) => {
+    setNextOfKinEntries((prev) => prev.map((entry) => (entry.id === entryId ? updater(entry) : entry)))
+  }
+
+  const handleAddNextOfKinEntry = () => {
+    setHasNextOfKin(true)
+    setNextOfKinEntries((prev) => [...prev, createEmptyNextOfKinEntry()])
+  }
+
+  const handleRemoveNextOfKinEntry = (entryId: string) => {
+    setNextOfKinEntries((prev) => {
+      const nextEntries = prev.filter((entry) => entry.id !== entryId)
+      return nextEntries.length > 0 ? nextEntries : [createEmptyNextOfKinEntry()]
+    })
+  }
+
+  const renderNextOfKinSection = (toggleName: string) => (
+    <Subsection title="Next of Kin Information">
+      <Field label="Does the client have a next of kin?">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+          <label
+            className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
+              hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <input
+              type="radio"
+              name={toggleName}
+              className="sr-only"
+              checked={hasNextOfKin}
+              onChange={() => setHasNextOfKin(true)}
+            />
+            Yes
+          </label>
+          <label
+            className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
+              !hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <input
+              type="radio"
+              name={toggleName}
+              className="sr-only"
+              checked={!hasNextOfKin}
+              onChange={() => setHasNextOfKin(false)}
+            />
+            No
+          </label>
+        </div>
+      </Field>
+
+      {hasNextOfKin ? (
+        <div className="mt-4 space-y-5">
+          {nextOfKinEntries.map((entry, index) => (
+            <div key={entry.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-slate-600">Next of Kin {index + 1}</p>
+                {nextOfKinEntries.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveNextOfKinEntry(entry.id)}
+                    className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2.5 py-1 text-[12px] font-semibold text-red-600 transition hover:bg-red-50"
+                  >
+                    <Trash2 size={12} /> Remove
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Field label="First Name">
+                  <input value={entry.nameParts.firstName} onChange={(event) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, nameParts: { ...prev.nameParts, firstName: event.target.value } }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                </Field>
+                <Field label="Middle Initial">
+                  <input value={entry.nameParts.middleInitial} maxLength={1} onChange={(event) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, nameParts: { ...prev.nameParts, middleInitial: event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase() } }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                </Field>
+                <Field label="Last Name">
+                  <input value={entry.nameParts.lastName} onChange={(event) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, nameParts: { ...prev.nameParts, lastName: event.target.value } }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                </Field>
+                <Field label="Suffix">
+                  <select value={entry.nameParts.suffix} onChange={(event) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, nameParts: { ...prev.nameParts, suffix: event.target.value } }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]">
+                    <option value="">None</option>
+                    {NAME_SUFFIX_OPTIONS.filter((item) => item).map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Relationship to OFW">
+                  <select
+                    value={entry.relationshipToOfw}
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      updateNextOfKinEntry(entry.id, (prev) => ({
+                        ...prev,
+                        relationshipToOfw: nextValue,
+                        relationshipOther: nextValue === 'Other' ? prev.relationshipOther : '',
+                      }))
+                    }}
+                    className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                  >
+                    <option value="">Select relationship</option>
+                    {NEXT_OF_KIN_RELATIONSHIP_OPTIONS.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </Field>
+                {entry.relationshipToOfw === 'Other' ? (
+                  <Field label="Specify Relationship">
+                    <input
+                      value={entry.relationshipOther}
+                      onChange={(event) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, relationshipOther: event.target.value }))}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
+                    />
+                  </Field>
+                ) : null}
+                <Field label="Contact Number">
+                  <CountryCodePhoneInput value={entry.contact} onChange={(nextValue) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, contact: nextValue }))} />
+                </Field>
+                <Field label="Email Address">
+                  <input value={entry.email} onChange={(event) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, email: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
+                </Field>
+                <AddressFieldGroup
+                  className="md:col-span-3"
+                  value={entry.address}
+                  onChange={(nextAddress) => updateNextOfKinEntry(entry.id, (prev) => ({ ...prev, address: nextAddress }))}
+                />
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={handleAddNextOfKinEntry}
+            className="inline-flex items-center gap-2 rounded-md border border-[#0b5384]/30 bg-[#f0f7ff] px-3 py-2 text-[13px] font-semibold text-[#0b5384] transition hover:bg-[#e5f1ff]"
+          >
+            <Plus size={14} /> Add another next of kin
+          </button>
+        </div>
+      ) : null}
+    </Subsection>
+  )
 
   const handleNext = () => {
     if (canProceedToNextStep() && currentStep < 3) {
@@ -318,20 +509,9 @@ export default function NewCasePage() {
         ].filter(Boolean) as string[],
       },
       nextOfKinProfile: hasNextOfKin
-        ? {
-            fullName: composeNameParts(kinNameParts),
-            relationship: kinRelationship,
-            relationshipOther: kinRelationship === 'Other' ? kinRelationshipOther.trim() : '',
-            contact: kinContact,
-            email: kinEmail,
-            address: { ...kinAddress },
-            specialCategories: [
-              specialSenior ? 'Senior Citizen' : '',
-              specialPwd ? 'PWD' : '',
-              specialSoloParent ? 'Solo Parent' : '',
-            ].filter(Boolean) as string[],
-          }
+        ? normalizedNextOfKinProfiles[0]
         : undefined,
+      nextOfKinProfiles: hasNextOfKin ? normalizedNextOfKinProfiles : undefined,
       workHistory: {
         lastCountry,
         lastJob: lastJobPosition,
@@ -372,7 +552,7 @@ export default function NewCasePage() {
         </div>
       </header>
 
-      <section className="mx-auto flex max-w-6xl overflow-hidden rounded-2xl border border-[#cbd5e1] bg-white shadow-sm">
+      <section className="mx-auto flex max-w-6xl overflow-visible rounded-2xl border border-[#cbd5e1] bg-white shadow-sm">
         {/* Left Sidebar */}
         <div className="w-1/3 min-w-[280px] max-w-[320px] shrink-0 border-r border-[#cbd5e1] bg-slate-50/60 p-8">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -644,72 +824,7 @@ export default function NewCasePage() {
                       </div>
                     </Subsection>
 
-                    <Subsection title="Next of Kin Information">
-                      <Field label="Does the client have a next of kin?">
-                        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-                          <label
-                            className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
-                              hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="existing-has-next-of-kin"
-                              className="sr-only"
-                              checked={hasNextOfKin}
-                              onChange={() => setHasNextOfKin(true)}
-                            />
-                            Yes
-                          </label>
-                          <label
-                            className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
-                              !hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="existing-has-next-of-kin"
-                              className="sr-only"
-                              checked={!hasNextOfKin}
-                              onChange={() => setHasNextOfKin(false)}
-                            />
-                            No
-                          </label>
-                        </div>
-                      </Field>
-                      {hasNextOfKin ? (
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-                          <Field label="First Name">
-                            <input value={kinNameParts.firstName} onChange={(event) => setKinNameParts((prev) => ({ ...prev, firstName: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
-                          </Field>
-                          <Field label="Middle Initial">
-                            <input value={kinNameParts.middleInitial} maxLength={1} onChange={(event) => setKinNameParts((prev) => ({ ...prev, middleInitial: event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase() }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
-                          </Field>
-                          <Field label="Last Name">
-                            <input value={kinNameParts.lastName} onChange={(event) => setKinNameParts((prev) => ({ ...prev, lastName: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
-                          </Field>
-                          <Field label="Suffix">
-                            <select value={kinNameParts.suffix} onChange={(event) => setKinNameParts((prev) => ({ ...prev, suffix: event.target.value }))} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]">
-                              <option value="">None</option>
-                              {NAME_SUFFIX_OPTIONS.filter((item) => item).map((item) => (
-                                <option key={item} value={item}>{item}</option>
-                              ))}
-                            </select>
-                          </Field>
-                          <Field label="Contact Number">
-                            <CountryCodePhoneInput value={kinContact} onChange={setKinContact} />
-                          </Field>
-                          <Field label="Email Address">
-                            <input value={kinEmail} onChange={(event) => setKinEmail(event.target.value)} className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]" />
-                          </Field>
-                          <AddressFieldGroup
-                            className="md:col-span-3"
-                            value={kinAddress}
-                            onChange={setKinAddress}
-                          />
-                        </div>
-                      ) : null}
-                    </Subsection>
+                    {renderNextOfKinSection('existing-has-next-of-kin')}
                   </div>
                 ) : null}
               </>
@@ -850,142 +965,19 @@ export default function NewCasePage() {
             </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <Subsection title="Next of Kin Information">
-                  <Field label="Does the client have a next of kin?" required>
-                    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-                      <label 
-                        className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
-                          hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="has-next-of-kin"
-                          className="sr-only"
-                          checked={hasNextOfKin}
-                          onChange={() => setHasNextOfKin(true)}
-                        />
-                        Yes
-                      </label>
-                      <label 
-                        className={`flex cursor-pointer items-center justify-center rounded-md px-6 py-1.5 text-[13px] font-bold transition-all ${
-                          !hasNextOfKin ? 'bg-white text-[#0b5384] shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="has-next-of-kin"
-                          className="sr-only"
-                          checked={!hasNextOfKin}
-                          onChange={() => setHasNextOfKin(false)}
-                        />
-                        No
-                      </label>
-                    </div>
-                  </Field>
-
-                  {hasNextOfKin ? (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-                      <Field label="First Name">
-                        <input
-                          value={kinNameParts.firstName}
-                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, firstName: event.target.value }))}
-                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        />
-                      </Field>
-
-                      <Field label="Middle Initial">
-                        <input
-                          value={kinNameParts.middleInitial}
-                          maxLength={1}
-                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, middleInitial: event.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase() }))}
-                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        />
-                      </Field>
-
-                      <Field label="Last Name">
-                        <input
-                          value={kinNameParts.lastName}
-                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, lastName: event.target.value }))}
-                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        />
-                      </Field>
-
-                      <Field label="Suffix">
-                        <select
-                          value={kinNameParts.suffix}
-                          onChange={(event) => setKinNameParts((prev) => ({ ...prev, suffix: event.target.value }))}
-                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        >
-                          <option value="">None</option>
-                          {NAME_SUFFIX_OPTIONS.filter((item) => item).map((item) => (
-                            <option key={item} value={item}>{item}</option>
-                          ))}
-                        </select>
-                      </Field>
-
-                      <Field label="Relationship to Client">
-                        <select
-                          value={kinRelationship}
-                          onChange={(event) => {
-                            const nextValue = event.target.value
-                            setKinRelationship(nextValue)
-
-                            if (nextValue !== 'Other') {
-                              setKinRelationshipOther('')
-                            }
-                          }}
-                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        >
-                          <option value="">Select relationship</option>
-                          {NEXT_OF_KIN_RELATIONSHIP_OPTIONS.map((item) => (
-                            <option key={item} value={item}>{item}</option>
-                          ))}
-                        </select>
-                      </Field>
-
-                      {kinRelationship === 'Other' ? (
-                        <Field label="Specify Relationship">
-                          <input
-                            value={kinRelationshipOther}
-                            onChange={(event) => setKinRelationshipOther(event.target.value)}
-                            className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                          />
-                        </Field>
-                      ) : null}
-
-                      <Field label="Contact Number">
-                        <CountryCodePhoneInput value={kinContact} onChange={setKinContact} />
-                      </Field>
-
-                      <Field label="Email Address">
-                        <input
-                          type="email"
-                          value={kinEmail}
-                          onChange={(event) => setKinEmail(event.target.value)}
-                          className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none focus:border-[#0b5384] focus:ring-1 focus:ring-[#0b5384]"
-                        />
-                      </Field>
-
-                      <AddressFieldGroup
-                        className="md:col-span-3"
-                        value={kinAddress}
-                        onChange={setKinAddress}
-                      />
-                    </div>
-                  ) : null}
-                </Subsection>
+                {renderNextOfKinSection('has-next-of-kin')}
               </div>
             </div>
           ) : null}
-        </div>
-      )}
+
+            </div>
+          )}
 
           {currentStep === 3 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-500">Case narrative</h3>
-                <p className="mt-2 text-[13px] text-slate-500">Use bullet-like sentences to summarize the case background.</p>
+                <p className="mt-2 text-[13px] text-slate-500">Use concise plain text to summarize the case background.</p>
                 <div className="mt-4">
                   <Field label="Narrative">
                     <textarea
@@ -998,6 +990,31 @@ export default function NewCasePage() {
                   </Field>
                 </div>
               </div>
+
+              {clientSource === 'new' ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-6 shadow-sm">
+                  <h3 className="text-[12px] font-bold uppercase tracking-wider text-amber-800">Data Privacy Consent</h3>
+                  <p className="mt-2 text-[13px] leading-relaxed text-amber-900/90">
+                    I confirm that the client has been informed about this system&apos;s data privacy terms and conditions, and
+                    has given consent for their personal data to be collected, processed, and used for case management,
+                    referral coordination, and service delivery.
+                  </p>
+                  <label className="mt-4 inline-flex items-start gap-3 text-[13px] font-semibold text-amber-900">
+                    <input
+                      type="checkbox"
+                      checked={newClientDataConsent}
+                      onChange={(event) => setNewClientDataConsent(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-700 focus:ring-amber-600"
+                    />
+                    <span>I acknowledge and confirm client consent for data use in the system.</span>
+                  </label>
+                  {!newClientDataConsent ? (
+                    <p className="mt-3 text-[12px] font-medium text-amber-800">
+                      Required to create a case for a new client.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="rounded-xl border border-slate-200 bg-[#fcfdff] p-6 shadow-sm">
                 <h3 className="text-[12px] font-bold uppercase tracking-wider text-slate-500">Case Summary</h3>
@@ -1017,26 +1034,29 @@ export default function NewCasePage() {
                   </Field>
                   <Field label="Next of Kin" className="md:col-span-2">
                     <div className="min-h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700 flex items-center">
-                      {hasNextOfKin
-                        ? (kinDisplayName.length > 0 ? formatPersonName(kinDisplayName) : 'Not yet provided')
-                        : 'No next of kin indicated'}
+                      {nextOfKinSummary}
                     </div>
                   </Field>
-                  <Field label="Relationship to Client" className="md:col-span-2">
+                  <Field label="Relationship to OFW" className="md:col-span-2">
                     <div className="min-h-10 w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700 flex items-center">
-                      {hasNextOfKin ? kinRelationshipDisplay : 'No next of kin indicated'}
+                      {nextOfKinRelationshipSummary}
                     </div>
                   </Field>
                   <Field label="Narrative Preview" className="md:col-span-2">
-                    <div className="min-h-[90px] w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2 text-[13px] text-slate-700 whitespace-pre-wrap">
-                      {caseNarrativePreview.length > 0 ? caseNarrativePreview : 'No narrative provided.'}
+                    <div className="min-h-[90px] w-full rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-3 py-2">
+                      {caseNarrative.trim().length > 0 ? (
+                        <p className="text-[13px] text-slate-700 whitespace-pre-wrap">{caseNarrative}</p>
+                      ) : (
+                        <p className="text-[13px] text-slate-700">No narrative provided.</p>
+                      )}
                     </div>
                   </Field>
                 </div>
               </div>
             </div>
           )}
-        </div>
+
+          </div>
 
         {/* Action Footer */}
         <div className="mt-8 flex items-center justify-between border-t border-[#e2e8f0] pt-6">

@@ -83,7 +83,8 @@ function toCaseProfile(caseRecord: CaseManagerCase): {
   const persona = getClientPersona(caseRecord.caseNo)
   const nextOfKin = getNextOfKinForClient(caseRecord.clientName)
   const specialCategories = getSpecialCategories(caseRecord.caseNo)
-  const hasExplicitNoNextOfKin = Boolean(caseRecord.ofwProfile) && !caseRecord.nextOfKinProfile
+  const primaryNextOfKinProfile = caseRecord.nextOfKinProfiles?.[0] || caseRecord.nextOfKinProfile
+  const hasExplicitNoNextOfKin = Boolean(caseRecord.ofwProfile) && !primaryNextOfKinProfile
   const emptyAddress: AddressParts = {
     regionCode: '',
     regionName: '',
@@ -107,19 +108,19 @@ function toCaseProfile(caseRecord: CaseManagerCase): {
       specialCategories: caseRecord.ofwProfile?.specialCategories || specialCategories,
     },
     nextOfKin: {
-      fullName: hasExplicitNoNextOfKin ? '-' : caseRecord.nextOfKinProfile?.fullName || nextOfKin.name,
+      fullName: hasExplicitNoNextOfKin ? '-' : primaryNextOfKinProfile?.fullName || nextOfKin.name,
       relationship: hasExplicitNoNextOfKin
         ? '-'
-        : caseRecord.nextOfKinProfile?.relationship === 'Other'
-          ? (caseRecord.nextOfKinProfile?.relationshipOther?.trim() || 'Other')
-          : (caseRecord.nextOfKinProfile?.relationship || '-'),
-      contactNumber: hasExplicitNoNextOfKin ? '-' : caseRecord.nextOfKinProfile?.contact || nextOfKin.contact,
-      emailAddress: hasExplicitNoNextOfKin ? '-' : caseRecord.nextOfKinProfile?.email || nextOfKin.email,
-      homeAddress: formatAddressParts(hasExplicitNoNextOfKin ? emptyAddress : (caseRecord.nextOfKinProfile?.address || nextOfKin.address)),
-      homeAddressParts: cloneAddress(hasExplicitNoNextOfKin ? emptyAddress : (caseRecord.nextOfKinProfile?.address || nextOfKin.address)),
+        : primaryNextOfKinProfile?.relationship === 'Other'
+          ? (primaryNextOfKinProfile?.relationshipOther?.trim() || 'Other')
+          : (primaryNextOfKinProfile?.relationship || '-'),
+      contactNumber: hasExplicitNoNextOfKin ? '-' : primaryNextOfKinProfile?.contact || nextOfKin.contact,
+      emailAddress: hasExplicitNoNextOfKin ? '-' : primaryNextOfKinProfile?.email || nextOfKin.email,
+      homeAddress: formatAddressParts(hasExplicitNoNextOfKin ? emptyAddress : (primaryNextOfKinProfile?.address || nextOfKin.address)),
+      homeAddressParts: cloneAddress(hasExplicitNoNextOfKin ? emptyAddress : (primaryNextOfKinProfile?.address || nextOfKin.address)),
       specialCategories: hasExplicitNoNextOfKin
         ? []
-        : (caseRecord.nextOfKinProfile?.specialCategories || caseRecord.ofwProfile?.specialCategories || specialCategories),
+        : (primaryNextOfKinProfile?.specialCategories || caseRecord.ofwProfile?.specialCategories || specialCategories),
     },
     workHistory: {
       lastCountry: caseRecord.workHistory?.lastCountry || persona.lastCountry,

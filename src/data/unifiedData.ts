@@ -693,6 +693,15 @@ export type CaseManagerCase = SharedReferralCase & {
     address: AddressParts
     specialCategories?: string[]
   }
+  nextOfKinProfiles?: Array<{
+    fullName: string
+    relationship?: string
+    relationshipOther?: string
+    contact: string
+    email: string
+    address: AddressParts
+    specialCategories?: string[]
+  }>
   workHistory?: {
     lastCountry: string
     lastJob: string

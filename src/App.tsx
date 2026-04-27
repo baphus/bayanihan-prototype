@@ -52,6 +52,7 @@ import TrackingOtpVerificationPage from './pages/TrackingOtpVerificationPage'
 import OfwMyCasesPage from './pages/ofw/MyCasesPage'
 import OfwLayout from './components/layout/OfwLayout'
 import OfwDashboardPage from './pages/ofw/DashboardPage'
+import EditProfilePage from './pages/shared/EditProfilePage'
 
 export default function App() {
   return (
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="stakeholders/:stakeholderId" element={<StakeholderViewPage />} />
           <Route path="reports" element={<CaseManagerReportsPage />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />
+          <Route path="profile" element={<EditProfilePage />} />
         </Route>
 
         {/* Agency Routes */}
@@ -102,9 +104,11 @@ export default function App() {
           <Route path="dashboard" element={<AgencyDashboardPage />} />
           <Route path="referred-cases" element={<AgencyReferredCasesPage />} />
           <Route path="referred-cases/:caseId" element={<AgencyReferredCaseViewPage />} />
+          <Route path="referrals/:referralId" element={<ReferralViewPage />} />
           <Route path="services" element={<AgencyServicesPage />} />
           <Route path="reports" element={<AgencyReportsPage />} />
           <Route path="activity" element={<AgencyActivityLogsPage />} />
+          <Route path="profile" element={<EditProfilePage />} />
         </Route>
 
         {/* System Admin Routes */}
@@ -136,6 +140,7 @@ export default function App() {
           <Route path="notifications" element={<SystemAdminNotificationsPage />} />
           <Route path="security-policies" element={<SystemAdminSecurityPoliciesPage />} />
           <Route path="system-settings" element={<SystemAdminSystemSettingsPage />} />
+          <Route path="profile" element={<EditProfilePage />} />
         </Route>
 
         <Route

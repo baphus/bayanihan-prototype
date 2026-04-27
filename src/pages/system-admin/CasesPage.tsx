@@ -72,7 +72,7 @@ export default function CasesPage() {
       caseStatus: toCaseHealthStatus(item.status),
       displayClientName:
         item.clientType === 'Next of Kin'
-          ? item.nextOfKinProfile?.fullName || getClientPersona(item.caseNo).kinName
+          ? (item.nextOfKinProfiles?.[0] || item.nextOfKinProfile)?.fullName || getClientPersona(item.caseNo).kinName
           : item.ofwProfile?.fullName || getClientPersona(item.caseNo).ofwName,
       referredTo: (() => {
         const agencies = Array.from(new Set(getManagedReferralsByCaseId(item.id).map((referral) => referral.agencyName)))
@@ -90,7 +90,7 @@ export default function CasesPage() {
       specialCategory: (() => {
         const categories =
           item.clientType === 'Next of Kin'
-            ? item.nextOfKinProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
+            ? (item.nextOfKinProfiles?.[0] || item.nextOfKinProfile)?.specialCategories ?? getSpecialCategories(item.caseNo)
             : item.ofwProfile?.specialCategories ?? getSpecialCategories(item.caseNo)
         return categories.length > 0 ? categories.join(', ') : 'None'
       })(),
