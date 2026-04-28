@@ -192,42 +192,49 @@ export default function DashboardPage() {
           </section>
 
           {/* RECENT ACTIVITY */}
-          <section className="bg-white border border-[#d8dee8] rounded-[2px] p-4 h-full">
-            <h3 className={`${pageHeadingStyles.sectionTitle} mb-3`}>Recent Activity</h3>
-            <div className="flex-1">
-              <div className="relative pl-4 h-full">
-                <div className="absolute left-[4px] top-1 bottom-1 w-px bg-[#cbd5e1]" />
-                <div className="space-y-4">
+          <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col h-full">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-[14px] font-bold text-slate-900 uppercase tracking-wider">Recent Activity</h3>
+              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" title="Live Updates" />
+            </div>
+            
+            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-1">
                 <ActivityItem 
                   title="New Referral Assigned" 
                   desc="Case MB-2024-4413 assigned to Overseas Workers Welfare Administration Region VII."
-                  time="12 MINUTES AGO"
+                  time="12m ago"
                   logoSrc="/logo.png"
                 />
                 <ActivityItem 
                   title="Referral Accepted" 
                   desc="Josephus Kim L. Sarsonas accepted Case MB-2024-7751."
-                  time="1 HOUR AGO"
+                  time="1h ago"
                   logoSrc={owwaLogo}
                 />
                 <ActivityItem 
                   title="Milestone Added" 
                   desc="Milestone 'Release of Aid' logged for Case MB-2024-5521."
-                  time="2 HOURS AGO"
+                  time="2h ago"
                   logoSrc={owwaLogo}
                 />
                 <ActivityItem 
                   title="Referral Completed" 
                   desc="Case MB-2024-4411 marked as completed."
-                  time="4 HOURS AGO"
+                  time="4h ago"
                   logoSrc={owwaLogo}
+                  isLast
                 />
-                </div>
               </div>
             </div>
-            <div className="pt-4 mt-4 border-t border-[#e2e8f0]">
-              <button className="w-full h-[30px] px-3 bg-[#0b5384] text-white text-[11px] font-bold rounded-[2px] hover:bg-[#09416a] transition">
-                VIEW YOUR ACTIVITY
+
+            <div className="mt-4 pt-4 border-t border-slate-100 px-1">
+              <button 
+                onClick={() => navigate('/agency/activities')}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-50 text-slate-600 text-[12px] font-bold rounded-lg hover:bg-slate-100 hover:text-blue-900 transition-all active:scale-[0.98]"
+              >
+                <span>VIEW FULL AUDIT LOG</span>
+                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
               </button>
             </div>
           </section>
@@ -251,16 +258,30 @@ function StatCard({ title, value, icon, activeTopBorder = "border-t-[3px] border
   )
 }
 
-function ActivityItem({ title, desc, time, logoSrc }: { title: string; desc: string; time: string; logoSrc: string }) {
+function ActivityItem({ title, desc, time, logoSrc, isLast }: { title: string; desc: string; time: string; logoSrc: string, isLast?: boolean }) {
   return (
-    <div className="relative flex items-start gap-3">
-      <div className="mt-0.5 -ml-[18px] h-5 w-5 overflow-hidden rounded-full border border-white bg-white shadow-sm z-10">
-        <img src={logoSrc} alt="Activity source" className="h-full w-full object-contain p-[1px]" />
+    <div className="relative flex items-start gap-4 group cursor-pointer transition-all duration-200">
+      {/* Timeline Line */}
+      {!isLast && (
+        <div className="absolute left-[13px] top-[30px] bottom-[-20px] w-0.5 bg-slate-100 group-hover:bg-blue-100 transition-colors" />
+      )}
+      
+      {/* Activity Logo/Icon */}
+      <div className="relative z-10 shrink-0 mt-0.5">
+        <div className="h-7 w-7 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden group-hover:border-blue-200 group-hover:shadow-md transition-all group-hover:scale-105">
+          <img src={logoSrc} alt="" className="h-5 w-5 object-contain" />
+        </div>
       </div>
-      <div>
-        <p className="text-[11px] leading-5 font-semibold text-slate-700">{title}</p>
-        <p className="text-[11px] leading-5 text-slate-600">{desc}</p>
-        <p className="mt-0.5 text-[10px] text-slate-400">{time}</p>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pb-6">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[13px] font-bold text-slate-800 group-hover:text-blue-900 transition-colors truncate">{title}</p>
+          <span className="text-[10px] font-bold text-slate-400 group-hover:text-slate-500 whitespace-nowrap uppercase tracking-wider">{time}</span>
+        </div>
+        <p className="mt-1 text-[12px] leading-relaxed text-slate-500 group-hover:text-slate-600 transition-colors line-clamp-2">
+          {desc}
+        </p>
       </div>
     </div>
   )

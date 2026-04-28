@@ -29,7 +29,7 @@ export default function ReferralsPage() {
     return rows.filter((item) => {
       const matchesSearch =
         query.length === 0 ||
-        [item.caseNo, item.clientName, item.service, item.agencyName, item.remarks, item.notes].join(' ').toLowerCase().includes(query)
+        [item.caseNo, item.clientName, item.service, item.agencyName, item.remarks].join(' ').toLowerCase().includes(query)
       const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter
       return matchesSearch && matchesStatus
     })

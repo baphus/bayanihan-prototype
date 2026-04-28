@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { JSX, ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
@@ -159,7 +159,7 @@ function buildDetailCase(referralId: string): DetailCase | null {
 }
 
 function buildFallbackNotesHistory(referral: CaseManagerReferral): CaseManagerReferralNote[] {
-  const source = referral.notes.trim() || referral.remarks.trim()
+  const source = referral.remarks.trim()
   if (!source) {
     return []
   }
@@ -428,8 +428,6 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const [statusRemark, setStatusRemark] = useState('')
   const [commentDraft, setCommentDraft] = useState('')
   const [replyToNoteId, setReplyToNoteId] = useState<string | null>(null)
-  const requirementUploadInputRef = useRef<HTMLInputElement | null>(null)
-  const [pendingRequirementUpload, setPendingRequirementUpload] = useState<{ requirement: string } | null>(null)
   const [activeVersionGroupId, setActiveVersionGroupId] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState('')
 
@@ -563,7 +561,6 @@ export default function ReferredCaseViewPage(): JSX.Element {
 
       return {
         ...current,
-        notes: nextContent,
         noteHistory: nextNoteHistory,
         updatedAt: nowIso,
       }
@@ -588,53 +585,6 @@ export default function ReferredCaseViewPage(): JSX.Element {
     setReplyToNoteId(null)
     setRefreshKey((prev) => prev + 1)
     setSaveMessage(`Saved ${nowLabel()}.`)
-  }
-
-  const requestMissingRequirementUpload = (requirement: string) => {
-    setPendingRequirementUpload({ requirement })
-    requirementUploadInputRef.current?.click()
-  }
-
-  const uploadMissingRequirementDocument = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!activeReferral || !pendingRequirementUpload || !file) {
-      return
-    }
-
-    const nowIso = new Date().toISOString()
-    const normalizedRequirementGroup = normalizeDocumentMatchValue(pendingRequirementUpload.requirement).replace(/\s+/g, '-') || 'requirement'
-    const versionGroupId = `req-${activeReferral.id}-${normalizedRequirementGroup}`
-    const displayName = `${pendingRequirementUpload.requirement} - ${file.name}`
-
-    updateManagedReferral(activeReferral.id, (current) => {
-      const nextDocuments = [...(current.documents ?? [])]
-      const attachmentId = `doc-${current.id}-requirement-${Date.now()}`
-
-      nextDocuments.push({
-        id: attachmentId,
-        name: displayName,
-        uploadedBy: agencyActor,
-        uploadedAt: nowIso,
-        versionGroupId,
-      })
-
-      return {
-        ...current,
-        documents: nextDocuments,
-        updatedAt: nowIso,
-      }
-    })
-
-    addManagedReferralMilestone(
-      activeReferral.id,
-      'Compliance Document Uploaded',
-      `${pendingRequirementUpload.requirement}: ${displayName}`,
-    )
-
-    setRefreshKey((prev) => prev + 1)
-    setSaveMessage(`Saved ${nowLabel()}.`)
-    setPendingRequirementUpload(null)
-    event.target.value = ''
   }
 
   // Load case data fresh whenever caseId changes
@@ -859,15 +809,8 @@ export default function ReferredCaseViewPage(): JSX.Element {
 
           <SideCard title="DOCUMENTS">
             <div className="space-y-3">
-              <input
-                ref={requirementUploadInputRef}
-                type="file"
-                onChange={uploadMissingRequirementDocument}
-                className="hidden"
-              />
-
               {serviceGroups.map((group) => {
-                const { matches: requirementMatches, unassignedDocuments } = matchRequirementsToDocuments(group.requiredDocuments, activeDocuments)
+                const { matches: requirementMatches } = matchRequirementsToDocuments(group.requiredDocuments, activeDocuments)
                 const attachedRequirementCount = requirementMatches.filter((match) => Boolean(match.document)).length
 
                 return (
@@ -893,10 +836,10 @@ export default function ReferredCaseViewPage(): JSX.Element {
                                   className={`inline-flex items-center rounded-[2px] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
                                     isAttached
                                       ? 'bg-[#ecfdf5] text-[#166534] border border-[#86efac]'
-                                      : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
                                   }`}
                                 >
-                                  {isAttached ? 'Attached' : 'Missing'}
+                                  {isAttached ? 'Attached' : 'Not Attached'}
                                 </span>
                               </div>
 
@@ -917,17 +860,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
                                     </button>
                                   </div>
                                 </div>
-                              ) : (
-                                <div className="mt-2 flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => requestMissingRequirementUpload(requirement)}
-                                    className="h-[26px] px-2.5 bg-[#0b5384] text-white text-[10px] font-bold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
-                                  >
-                                    Upload Requirement
-                                  </button>
-                                </div>
-                              )}
+                              ) : null}
                             </div>
                           )
                         })
@@ -936,36 +869,6 @@ export default function ReferredCaseViewPage(): JSX.Element {
                       )}
                     </div>
 
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-500">Other Attached Files</p>
-                      {unassignedDocuments.length ? (
-                        unassignedDocuments.map((doc) => (
-                          <div key={doc.id} className="bg-white border border-[#e2e8f0] p-2.5 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-6 h-6 rounded-[2px] bg-slate-100 text-slate-700 flex items-center justify-center text-[10px] font-black">
-                                <span>F</span>
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
-                                <p className="text-[9px] text-slate-400 truncate">{doc.uploadedBy} • {formatIsoToDisplayDate(doc.uploadedAt)}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
-                              <button
-                                type="button"
-                                onClick={() => setActiveVersionGroupId(doc.versionGroupId ?? doc.id)}
-                                className="text-[10px] text-slate-600 font-bold hover:underline"
-                              >
-                                View Versions
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-[11px] text-slate-500">No additional files outside mapped requirements.</p>
-                      )}
-                    </div>
                   </div>
 
                 )
@@ -1031,7 +934,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
 
           <section className="bg-white border border-[#d8dee8] rounded-[2px] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#334155]`}>CASE COMMENTS</h3>
+              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#334155]`}>REFERRAL COMMENTS</h3>
             </div>
             {activeReferral ? (
               <p className="mb-2 text-[10px] text-slate-500">

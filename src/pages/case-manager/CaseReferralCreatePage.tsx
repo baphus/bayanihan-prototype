@@ -20,7 +20,6 @@ export default function CaseReferralCreatePage() {
   const [referAgencyId, setReferAgencyId] = useState('')
   const [referServiceValues, setReferServiceValues] = useState<string[]>([])
   const [referRemarks, setReferRemarks] = useState('')
-  const [referNotes, setReferNotes] = useState('')
   const [referRequirementUploads, setReferRequirementUploads] = useState<Record<string, File | null>>({})
 
   const allAgencies = useMemo(() => getCaseManagerAgencies(), [])
@@ -151,7 +150,7 @@ export default function CaseReferralCreatePage() {
       createdAt: nowIso,
       updatedAt: nowIso,
       remarks: referRemarks.trim() || 'Referral created from Case View page.',
-      notes: referNotes.trim() || 'No additional notes provided.',
+      noteHistory: [],
       documents: docs,
     }
 
@@ -239,16 +238,7 @@ export default function CaseReferralCreatePage() {
             />
           </div>
 
-          <div className="md:col-span-2">
-            <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Notes</label>
-            <textarea
-              rows={3}
-              value={referNotes}
-              onChange={(event) => setReferNotes(event.target.value)}
-              className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
-              placeholder="Optional internal notes"
-            />
-          </div>
+          
 
           <div className="md:col-span-2">
             <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Service Requirements</label>

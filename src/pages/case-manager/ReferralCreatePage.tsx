@@ -26,6 +26,7 @@ export default function ReferralCreatePage() {
   const [selectedServiceValues, setSelectedServiceValues] = useState<string[]>([])
   const [remarksValue, setRemarksValue] = useState('')
   const [notesValue, setNotesValue] = useState('')
+  
   const [requirementUploads, setRequirementUploads] = useState<Record<string, File | null>>({})
 
   const selectedCase = openCases.find((item) => item.id === selectedCaseId)
@@ -165,7 +166,7 @@ export default function ReferralCreatePage() {
       createdAt: nowIso,
       updatedAt: nowIso,
       remarks: remarksValue.trim() || 'Referral created by Case Manager.',
-      notes: notesValue.trim() || 'No additional notes provided.',
+      noteHistory: [],
       documents: docs,
     }
 

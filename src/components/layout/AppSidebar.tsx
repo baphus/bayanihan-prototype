@@ -100,37 +100,48 @@ export default function AppSidebar({ navigation = [], navigationGroups, user, on
         </div>
 
         {/* User Profile */}
-        <div className="flex items-center justify-between px-6 py-6 bg-white">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-900 border border-blue-200">
+        <div className="px-5 py-5 bg-white border-t border-slate-200">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-900 border border-blue-200 overflow-hidden">
               {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt="Avatar" className="h-full w-full rounded-full object-cover" />
+                <img src={user.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
               ) : (
                 user.initials
               )}
             </div>
-            <div className="flex flex-col">
-              <span className="text-[13px] text-blue-950 font-bold font-body leading-tight whitespace-nowrap">{user.name}</span>
-              <span className="text-[10px] font-bold tracking-[0.06em] text-slate-500 mt-0.5 whitespace-nowrap max-w-[150px] overflow-hidden text-ellipsis">{user.role}</span>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-[13px] text-blue-950 font-bold font-body leading-none truncate" title={user.name}>
+                {user.name}
+              </span>
+              <span className="text-[10px] font-bold tracking-[0.06em] text-slate-500 mt-1 uppercase truncate" title={user.role}>
+                {user.role}
+              </span>
             </div>
           </div>
-          {profileHref ? (
-            <Link
-              to={profileHref}
-              className="text-slate-500 hover:text-[#0b5384] transition-colors ml-2"
-              title="Edit Profile"
-              aria-label="Edit Profile"
+          
+          <div className="mt-4 flex items-center justify-between gap-2">
+            {profileHref ? (
+              <Link
+                to={profileHref}
+                className="flex flex-1 items-center justify-center gap-2 px-3 py-1.5 rounded-md border border-slate-200 text-[11px] font-bold font-label text-slate-600 hover:bg-slate-50 hover:text-blue-900 transition-all shadow-sm active:shadow-none translate-y-0 active:translate-y-0.5"
+                title="Edit Profile"
+              >
+                <Pencil className="w-3.5 h-3.5" strokeWidth={2.5} />
+                <span>EDIT PROFILE</span>
+              </Link>
+            ) : null}
+            <button 
+              onClick={onLogout}
+              className={clsx(
+                "flex items-center justify-center rounded-md border text-red-600 hover:bg-red-50 transition-all shadow-sm active:shadow-none translate-y-0 active:translate-y-0.5 px-3 py-1.5 text-[11px] font-bold font-label",
+                profileHref ? "w-10 border-red-100" : "flex-1 gap-2 border-red-100"
+              )}
+              title="Log Out"
             >
-              <Pencil className="w-[20px] h-[20px]" strokeWidth={2} />
-            </Link>
-          ) : null}
-          <button 
-            onClick={onLogout}
-            className="text-red-500 hover:text-red-700 transition-colors ml-2" 
-            title="Log Out"
-          >
-            <LogOut className="w-[22px] h-[22px]" strokeWidth={2} />
-          </button>
+              <LogOut className="w-3.5 h-3.5" strokeWidth={2.5} />
+              {profileHref ? null : <span>LOG OUT</span>}
+            </button>
+          </div>
         </div>
       </div>
     </aside>

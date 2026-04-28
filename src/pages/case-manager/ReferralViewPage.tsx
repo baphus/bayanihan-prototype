@@ -35,7 +35,7 @@ function withOffsetMinutes(iso: string, minutes: number): string {
 }
 
 function buildFallbackNotesHistory(referral: CaseManagerReferral): CaseManagerReferralNote[] {
-  const source = referral.notes.trim() || referral.remarks.trim()
+  const source = referral.remarks.trim()
   if (!source) {
     return []
   }
@@ -231,15 +231,23 @@ export default function ReferralViewPage() {
     }
 
     const latestCaseManagerNote = getReferralNotesHistory(resolvedReferral).find((note) => note.createdBy.includes('Case Manager'))
-    return latestCaseManagerNote?.content ?? resolvedReferral.notes
+    return latestCaseManagerNote?.content ?? resolvedReferral.remarks ?? ''
   })
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const attachInputRef = useRef<HTMLInputElement | null>(null)
+  const requirementUploadInputRef = useRef<HTMLInputElement | null>(null)
   const [isAddNoteOpen, setIsAddNoteOpen] = useState(false)
   const [pendingNote, setPendingNote] = useState<string | null>(null)
   const [pendingReplyToNoteId, setPendingReplyToNoteId] = useState<string | null>(null)
   const [pendingReplacements, setPendingReplacements] = useState<Record<string, File>>({})
   const [pendingAttachments, setPendingAttachments] = useState<File[]>([])
+  const [pendingRequirementTarget, setPendingRequirementTarget] = useState<{
+    serviceTitle: string
+    requirement: string
+  } | null>(null)
+  const [pendingRequirementUploads, setPendingRequirementUploads] = useState<
+    Array<{ key: string; serviceTitle: string; requirement: string; file: File }>
+  >([])
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [activeVersionGroupId, setActiveVersionGroupId] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState('')
@@ -254,6 +262,8 @@ export default function ReferralViewPage() {
       setPendingReplyToNoteId(null)
       setPendingReplacements({})
       setPendingAttachments([])
+      setPendingRequirementTarget(null)
+      setPendingRequirementUploads([])
       setIsConfirmModalOpen(false)
       setActiveVersionGroupId(null)
       setSaveMessage('')
@@ -263,12 +273,14 @@ export default function ReferralViewPage() {
     setReferral(resolvedReferral)
     setTimeline(buildReferralTimeline(resolvedReferral))
     const latestCaseManagerNote = getReferralNotesHistory(resolvedReferral).find((note) => note.createdBy.includes('Case Manager'))
-    setNotesDraft(latestCaseManagerNote?.content ?? resolvedReferral.notes)
+    setNotesDraft(latestCaseManagerNote?.content ?? resolvedReferral.remarks ?? '')
     setIsAddNoteOpen(false)
     setPendingNote(null)
     setPendingReplyToNoteId(null)
     setPendingReplacements({})
     setPendingAttachments([])
+    setPendingRequirementTarget(null)
+    setPendingRequirementUploads([])
     setIsConfirmModalOpen(false)
     setActiveVersionGroupId(null)
     setSaveMessage('')
@@ -328,12 +340,16 @@ export default function ReferralViewPage() {
   }, [activeDocuments, serviceRequirementGroups])
   const notesHistory = getReferralNotesHistory(referral)
   const mostRecentCaseManagerNote = notesHistory.find((note) => note.createdBy.includes('Case Manager'))
-  const latestNoteText = mostRecentCaseManagerNote?.content ?? referral.notes?.trim() ?? ''
+  const latestNoteText = mostRecentCaseManagerNote?.content ?? referral.remarks?.trim() ?? ''
   const pendingNoteValue = pendingNote?.trim() ?? ''
   const replyToNote = pendingReplyToNoteId
     ? notesHistory.find((note) => note.id === pendingReplyToNoteId) ?? null
     : null
-  const hasPendingChanges = Boolean(pendingNoteValue) || Object.keys(pendingReplacements).length > 0 || pendingAttachments.length > 0
+  const hasPendingChanges =
+    Boolean(pendingNoteValue) ||
+    Object.keys(pendingReplacements).length > 0 ||
+    pendingAttachments.length > 0 ||
+    pendingRequirementUploads.length > 0
   const documentVersionRows = activeVersionGroupId
     ? documents
         .filter((doc) => (doc.versionGroupId ?? doc.id) === activeVersionGroupId)
@@ -348,7 +364,10 @@ export default function ReferralViewPage() {
       return `Replace document: ${targetDoc?.name ?? 'Unknown document'} -> ${file.name}`
     }),
     ...pendingAttachments.map((file) => `Attach document: ${file.name}`),
+    ...pendingRequirementUploads.map((entry) => `Attach required document: ${entry.requirement} -> ${entry.file.name}`),
   ].filter((item): item is string => Boolean(item))
+
+  const buildRequirementKey = (serviceTitle: string, requirement: string) => `${serviceTitle}::${requirement}`
 
   const handleDocumentSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
@@ -374,6 +393,30 @@ export default function ReferralViewPage() {
     event.target.value = ''
   }
 
+  const requestMissingRequirementUpload = (serviceTitle: string, requirement: string) => {
+    setPendingRequirementTarget({ serviceTitle, requirement })
+    requirementUploadInputRef.current?.click()
+  }
+
+  const handleMissingRequirementSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !pendingRequirementTarget) {
+      return
+    }
+
+    const key = buildRequirementKey(pendingRequirementTarget.serviceTitle, pendingRequirementTarget.requirement)
+    setPendingRequirementUploads((prev) => {
+      const next = prev.filter((entry) => entry.key !== key)
+      return [...next, { key, ...pendingRequirementTarget, file }]
+    })
+    setPendingRequirementTarget(null)
+    event.target.value = ''
+  }
+
+  const removePendingRequirementUpload = (requirementKey: string) => {
+    setPendingRequirementUploads((prev) => prev.filter((entry) => entry.key !== requirementKey))
+  }
+
   const removePendingAttachment = (index: number) => {
     setPendingAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
   }
@@ -393,6 +436,8 @@ export default function ReferralViewPage() {
     setPendingReplyToNoteId(null)
     setPendingReplacements({})
     setPendingAttachments([])
+    setPendingRequirementTarget(null)
+    setPendingRequirementUploads([])
     setIsConfirmModalOpen(false)
     setNotesDraft(latestNoteText)
   }
@@ -439,6 +484,18 @@ export default function ReferralViewPage() {
         logoType: 'bayanihan',
         title: 'Referral Documents Attached',
         description: `${pendingAttachments.length} new referral document${pendingAttachments.length > 1 ? 's were' : ' was'} attached by the Case Manager.`,
+        timestamp: nowIso,
+        actor: CASE_MANAGER_ACTOR,
+      })
+    }
+
+    if (pendingRequirementUploads.length > 0) {
+      nextTimeline.push({
+        id: `${referral.id}-required-docs-attached-${Date.now()}`,
+        actorType: 'Case Manager',
+        logoType: 'bayanihan',
+        title: 'Required Documents Uploaded',
+        description: `${pendingRequirementUploads.length} required document${pendingRequirementUploads.length > 1 ? 's were' : ' was'} uploaded by the Case Manager.`,
         timestamp: nowIso,
         actor: CASE_MANAGER_ACTOR,
       })
@@ -502,9 +559,23 @@ export default function ReferralViewPage() {
         })
       })
 
+      pendingRequirementUploads.forEach((entry, index) => {
+        const normalizedService = normalizeDocumentMatchValue(entry.serviceTitle).replace(/\s+/g, '-') || 'service'
+        const normalizedRequirement = normalizeDocumentMatchValue(entry.requirement).replace(/\s+/g, '-') || 'requirement'
+        const versionGroupId = `req-${prev.id}-${normalizedService}-${normalizedRequirement}`
+        const attachmentId = `doc-${prev.id}-requirement-${Date.now()}-${index}`
+
+        nextDocuments.push({
+          id: attachmentId,
+          name: `${entry.requirement} - ${entry.file.name}`,
+          uploadedBy: CASE_MANAGER_ACTOR,
+          uploadedAt: nowIso,
+          versionGroupId,
+        })
+      })
+
       const updatedReferral = {
         ...prev,
-        notes: pendingNoteValue || prev.notes,
         noteHistory: nextHistory,
         documents: nextDocuments,
         updatedAt: nowIso,
@@ -519,6 +590,8 @@ export default function ReferralViewPage() {
     setPendingReplyToNoteId(null)
     setPendingReplacements({})
     setPendingAttachments([])
+    setPendingRequirementTarget(null)
+    setPendingRequirementUploads([])
     setIsConfirmModalOpen(false)
     setNotesDraft('')
     setSaveMessage(`Saved ${formatDisplayDateTime(nowIso)}.`)
@@ -573,6 +646,12 @@ export default function ReferralViewPage() {
                 onChange={handleAttachDocumentsSelect}
                 className="hidden"
               />
+              <input
+                ref={requirementUploadInputRef}
+                type="file"
+                onChange={handleMissingRequirementSelect}
+                className="hidden"
+              />
             </div>
 
             {pendingAttachments.length ? (
@@ -613,6 +692,8 @@ export default function ReferralViewPage() {
                         <div className="space-y-2">
                           {group.matches.map(({ requirement, document }) => {
                             const isAttached = Boolean(document)
+                            const requirementKey = buildRequirementKey(group.serviceTitle, requirement)
+                            const pendingRequirement = pendingRequirementUploads.find((entry) => entry.key === requirementKey)
 
                             return (
                               <div key={`${group.serviceTitle}-${requirement}`} className="rounded-[2px] border border-[#e2e8f0] bg-white px-2.5 py-2">
@@ -667,7 +748,35 @@ export default function ReferralViewPage() {
                                       />
                                     </div>
                                   </div>
-                                ) : null}
+                                ) : (
+                                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                                    {pendingRequirement ? (
+                                      <div className="text-[10px] text-amber-700">
+                                        Pending upload: {pendingRequirement.file.name}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-amber-700">Document required.</span>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                      {pendingRequirement ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => removePendingRequirementUpload(requirementKey)}
+                                          className="text-[10px] font-semibold text-amber-700 hover:underline"
+                                        >
+                                          Remove
+                                        </button>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={() => requestMissingRequirementUpload(group.serviceTitle, requirement)}
+                                        className="h-[26px] px-2.5 bg-[#0b5384] text-white text-[10px] font-bold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
+                                      >
+                                        Upload Requirement
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )
                           })}
@@ -679,52 +788,6 @@ export default function ReferralViewPage() {
                   )
                 })}
 
-                <div className="rounded-[3px] border border-[#d8dee8] bg-[#f8fafc] p-3 space-y-2">
-                  <h4 className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-500">Other Attached Files</h4>
-                  {groupedRequirements.unassignedDocuments.length ? (
-                    groupedRequirements.unassignedDocuments.map((doc) => (
-                      <div key={doc.id} className="bg-white border border-[#e2e8f0] p-2.5 flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</p>
-                          <p className="text-[9px] text-slate-400 truncate">{doc.uploadedBy} • {formatDisplayDateTime(doc.uploadedAt)}</p>
-                          {pendingReplacements[doc.id] ? (
-                            <p className="mt-1 text-[10px] font-semibold text-amber-700">
-                              Pending replacement: {pendingReplacements[doc.id].name}
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button className="text-[10px] text-[#0b5384] font-bold hover:underline">View</button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveVersionGroupId(doc.versionGroupId ?? doc.id)}
-                            className="text-[10px] text-slate-600 font-bold hover:underline"
-                          >
-                            View Versions
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fileInputRefs.current[doc.id]?.click()}
-                            className="text-[10px] text-[#0b5384] font-bold hover:underline"
-                          >
-                            Replace Document
-                          </button>
-                          <input
-                            ref={(element) => {
-                              fileInputRefs.current[doc.id] = element
-                            }}
-                            data-doc-id={doc.id}
-                            type="file"
-                            onChange={handleDocumentSelect}
-                            className="hidden"
-                          />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[11px] text-slate-500">No additional files outside mapped requirements.</p>
-                  )}
-                </div>
               </div>
             ) : (
               <div className="border border-dashed border-[#cbd5e1] rounded-[3px] p-4 text-center">
@@ -759,7 +822,7 @@ export default function ReferralViewPage() {
 
           <section className="rounded-[3px] border border-[#d8dee8] bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#1f2937]`}>Case Comments</h3>
+              <h3 className={`${pageHeadingStyles.sectionTitle} text-[#1f2937]`}>Referral Comments</h3>
               <button
                 type="button"
                 onClick={() => setIsAddNoteOpen((prev) => !prev)}

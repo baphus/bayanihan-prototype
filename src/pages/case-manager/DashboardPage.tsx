@@ -526,24 +526,32 @@ export default function DashboardPage() {
           </section>
 
           {/* RECENT ACTIVITY */}
-          <section className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="px-4 py-3 border-b border-slate-100">
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-blue-900">Recent Activity</h3>
+          <section className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-[11px] font-bold uppercase tracking-[0.15em] text-blue-900">Recent Activity</h3>
+              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
             </div>
-            <div className="p-4">
-              <div className="relative pl-4 border-l-2 border-slate-100 space-y-6">
-                {recentActivity.map((activity) => (
+            <div className="p-5 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-1">
+                {recentActivity.map((activity, index) => (
                   <ActivityItem
                     key={activity.id}
                     title={activity.title}
                     desc={activity.desc}
-                    time={activity.time.toUpperCase()}
+                    time={activity.time}
                     logoSrc={activity.logoSrc}
+                    isLast={index === recentActivity.length - 1}
                   />
                 ))}
               </div>
-              <button className="w-full mt-4 text-[11px] font-bold font-label text-blue-900 hover:text-blue-700 transition-colors">
-                VIEW ALL ACTIVITIES
+            </div>
+            <div className="px-5 py-4 border-t border-slate-50 flex items-center justify-center">
+              <button 
+                onClick={() => navigate('/case-manager/audit-logs')}
+                className="w-full flex items-center justify-center gap-2 py-2 text-[11px] font-bold font-label text-blue-900 bg-blue-50/50 hover:bg-blue-50 rounded-lg transition-all active:scale-[0.98]"
+              >
+                <span>VIEW ALL ACTIVITIES</span>
+                <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
               </button>
             </div>
           </section>
@@ -615,16 +623,30 @@ function ActionBtn({ icon, label, onClick }: { icon: ReactNode; label: string; o
   )
 }
 
-function ActivityItem({ title, desc, time, logoSrc }: { title: string; desc: string; time: string; logoSrc: string }) {
+function ActivityItem({ title, desc, time, logoSrc, isLast }: { title: string; desc: string; time: string; logoSrc: string, isLast?: boolean }) {
   return (
-    <div className="relative">
-      <span className="absolute -left-[25px] top-0 h-4 w-4 overflow-hidden rounded-full border border-white bg-white shadow-sm">
-        <img src={logoSrc} alt="Activity source" className="h-full w-full object-contain p-[1px]" />
-      </span>
-      <div className="space-y-0.5">
-        <p className="text-xs font-bold text-slate-900 font-body">{title}</p>
-        <p className="text-[11px] text-slate-500 font-body leading-relaxed">{desc}</p>
-        <p className="text-[9px] font-bold uppercase tracking-widest text-blue-800">{time}</p>
+    <div className="relative flex items-start gap-4 group cursor-pointer transition-all duration-200">
+      {/* Timeline Line */}
+      {!isLast && (
+        <div className="absolute left-[13px] top-[30px] bottom-[-20px] w-0.5 bg-slate-100 group-hover:bg-blue-100 transition-colors" />
+      )}
+      
+      {/* Activity Logo/Icon */}
+      <div className="relative z-10 shrink-0 mt-0.5">
+        <div className="h-7 w-7 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden group-hover:border-blue-200 group-hover:shadow-md transition-all group-hover:scale-105">
+          <img src={logoSrc} alt="" className="h-5 w-5 object-contain" />
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pb-6">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[12px] font-bold text-slate-800 group-hover:text-blue-900 transition-colors truncate">{title}</p>
+          <span className="text-[9px] font-bold text-slate-400 group-hover:text-slate-500 whitespace-nowrap uppercase tracking-wider">{time}</span>
+        </div>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500 group-hover:text-slate-600 transition-colors line-clamp-2">
+          {desc}
+        </p>
       </div>
     </div>
   )

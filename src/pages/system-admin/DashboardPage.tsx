@@ -156,26 +156,60 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <article className="rounded-[4px] border border-[#cbd5e1] bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className={pageHeadingStyles.sectionTitle}>Recent Activity</h2>
+        <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2 flex flex-col">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[14px] font-bold text-slate-900 uppercase tracking-wider">Recent System Activity</h2>
+              <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+            </div>
             <button
               type="button"
               onClick={() => navigate('/system-admin/activity-logs')}
-              className="rounded-[3px] border border-[#cbd5e1] bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-[#0b5384]"
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100 hover:text-blue-900 transition-all active:scale-95"
             >
-              Open Activity Logs
+              <span>View Audit Logs</span>
+              <span className="material-symbols-outlined text-[14px]">history</span>
             </button>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {recentActivity.map((log) => (
-              <div key={log.id} className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#0b5384]">{log.activityType.replaceAll('_', ' ')}</p>
-                  <p className="text-[11px] text-slate-500">{new Date(log.timestamp).toLocaleString('en-US')}</p>
+          <div className="space-y-1 pr-1 overflow-y-auto max-h-[400px] custom-scrollbar">
+            {recentActivity.map((log, index) => (
+              <div 
+                key={log.id} 
+                className="group relative flex items-start gap-4 p-3 rounded-lg hover:bg-slate-50 transition-all cursor-pointer mb-1 last:mb-0"
+              >
+                {/* Timeline Line */}
+                {index !== recentActivity.length - 1 && (
+                  <div className="absolute left-[29px] top-[30px] bottom-[-15px] w-0.5 bg-slate-100 group-hover:bg-blue-100 transition-colors" />
+                )}
+                
+                {/* Type Indicator */}
+                <div className="relative z-10 shrink-0 mt-0.5">
+                  <div className="h-8 w-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center group-hover:border-blue-200 group-hover:shadow-md transition-all group-hover:scale-105">
+                    <span className="material-symbols-outlined text-[18px] text-slate-400 group-hover:text-blue-500">
+                      {log.activityType.includes('CASE') ? 'folder_open' : 
+                       log.activityType.includes('USER') ? 'person' : 
+                       log.activityType.includes('AGENCY') ? 'business' : 'settings'}
+                    </span>
+                  </div>
                 </div>
-                <p className="mt-1 text-[12px] text-slate-700"><span className="font-semibold">{log.actor}</span> • {log.details}</p>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-blue-900 transition-colors">
+                      {log.activityType.replaceAll('_', ' ')}
+                    </p>
+                    <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap">
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[13px] leading-relaxed text-slate-600 group-hover:text-slate-900 transition-colors">
+                    <span className="font-bold text-slate-900">{log.actor}</span>
+                    <span className="mx-1.5 opacity-50">•</span>
+                    {log.details}
+                  </p>
+                </div>
               </div>
             ))}
           </div>

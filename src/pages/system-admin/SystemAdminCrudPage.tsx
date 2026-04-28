@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/UnifiedTable'
+import CountryCodePhoneInput from '../../components/ui/CountryCodePhoneInput'
 import { pageHeadingStyles } from '../agency/pageHeadingStyles'
 import { AGENCIES_DATA } from '../../data/agenciesData'
 import {
@@ -10,6 +11,7 @@ import {
   type SystemAdminEntity,
   type SystemAdminCrudRow,
   type SystemAdminRowStatus,
+  type MockUserRole,
 } from '../../data/unifiedData'
 
 type SystemAdminCrudPageProps = {
@@ -38,6 +40,15 @@ function isValidHttpUrl(value: string): boolean {
   } catch {
     return false
   }
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+function isValidTemporaryPassword(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed.length >= 8 && /[A-Z]/.test(trimmed) && /\d/.test(trimmed) && /[^A-Za-z0-9]/.test(trimmed)
 }
 
 export default function SystemAdminCrudPage({
@@ -75,6 +86,14 @@ export default function SystemAdminCrudPage({
   const [createAgencyMapLink, setCreateAgencyMapLink] = useState('')
   const [createAgencyCreatedAt, setCreateAgencyCreatedAt] = useState('')
   const [createAgencyUpdatedAt, setCreateAgencyUpdatedAt] = useState('')
+  const [isCreateUserWizardOpen, setIsCreateUserWizardOpen] = useState(false)
+  const [createUserStep, setCreateUserStep] = useState<1 | 2 | 3>(1)
+  const [selectedUserRole, setSelectedUserRole] = useState<MockUserRole | ''>('')
+  const [selectedUserAgencyId, setSelectedUserAgencyId] = useState('')
+  const [createUserFullName, setCreateUserFullName] = useState('')
+  const [createUserEmail, setCreateUserEmail] = useState('')
+  const [createUserContact, setCreateUserContact] = useState('')
+  const [createUserTempPassword, setCreateUserTempPassword] = useState('')
 
   useEffect(() => {
     const nextRows = getSystemAdminRows(entity)
@@ -130,6 +149,14 @@ export default function SystemAdminCrudPage({
     setCreateAgencyMapLink('')
     setCreateAgencyCreatedAt('')
     setCreateAgencyUpdatedAt('')
+    setIsCreateUserWizardOpen(false)
+    setCreateUserStep(1)
+    setSelectedUserRole('')
+    setSelectedUserAgencyId('')
+    setCreateUserFullName('')
+    setCreateUserEmail('')
+    setCreateUserContact('')
+    setCreateUserTempPassword('')
   }, [entity])
 
   const summary = useMemo(() => {
@@ -192,6 +219,18 @@ export default function SystemAdminCrudPage({
       return
     }
 
+    if (entity === 'users') {
+      setCreateUserStep(1)
+      setSelectedUserRole('')
+      setSelectedUserAgencyId('')
+      setCreateUserFullName('')
+      setCreateUserEmail('')
+      setCreateUserContact('')
+      setCreateUserTempPassword('')
+      setIsCreateUserWizardOpen(true)
+      return
+    }
+
     const recordName = window.prompt(`Enter ${recordLabel.toLowerCase()} name:`)?.trim()
     if (!recordName) {
       return
@@ -212,6 +251,91 @@ export default function SystemAdminCrudPage({
 
     setRows((prev) => [nextRow, ...prev])
     setActionMessage(`Created ${recordLabel.toLowerCase()} record: ${recordName}.`)
+  }
+
+  const userRoleOptions: MockUserRole[] = ['System Admin', 'Case Manager', 'Agency']
+  const selectedAgency = useMemo(() => AGENCIES_DATA.find((agency) => agency.id === selectedUserAgencyId), [selectedUserAgencyId])
+  const isAgencyRole = selectedUserRole === 'Agency'
+  const isUserStepOneValid = Boolean(selectedUserRole)
+  const isUserStepTwoValid = isAgencyRole ? Boolean(selectedUserAgencyId) : true
+  const isUserStepThreeValid = Boolean(
+    createUserFullName.trim() &&
+    createUserEmail.trim() &&
+    isValidEmail(createUserEmail) &&
+    createUserContact.trim() &&
+    isValidTemporaryPassword(createUserTempPassword),
+  )
+
+  const closeCreateUserWizard = () => {
+    setIsCreateUserWizardOpen(false)
+    setCreateUserStep(1)
+    setSelectedUserRole('')
+    setSelectedUserAgencyId('')
+    setCreateUserFullName('')
+    setCreateUserEmail('')
+    setCreateUserContact('')
+    setCreateUserTempPassword('')
+  }
+
+  const goToNextUserStep = () => {
+    if (createUserStep === 1 && isUserStepOneValid) {
+      if (selectedUserRole === 'Agency') {
+        setCreateUserStep(2)
+      } else {
+        setCreateUserStep(3)
+      }
+      return
+    }
+
+    if (createUserStep === 2 && isUserStepTwoValid) {
+      setCreateUserStep(3)
+    }
+  }
+
+  const goToPreviousUserStep = () => {
+    if (createUserStep === 2) {
+      setCreateUserStep(1)
+      return
+    }
+
+    if (createUserStep === 3) {
+      if (selectedUserRole === 'Agency') {
+        setCreateUserStep(2)
+      } else {
+        setCreateUserStep(1)
+      }
+    }
+  }
+
+  const submitCreateUser = () => {
+    if (!isUserStepThreeValid) {
+      return
+    }
+
+    const nextName = createUserFullName.trim()
+    const nextEmail = createUserEmail.trim()
+    if (!isValidEmail(nextEmail)) {
+      return
+    }
+    const agencyLabel = selectedAgency?.short || selectedAgency?.name
+    const scope = selectedUserRole === 'Agency' && agencyLabel
+      ? `Agency • ${agencyLabel}`
+      : selectedUserRole || 'System Admin'
+
+    const nextRow: SystemAdminCrudRow = {
+      id: `admin-user-${nextEmail}`,
+      entity: 'users',
+      recordId: nextEmail,
+      recordLabel: nextName,
+      scope,
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    }
+
+    setRows((prev) => [nextRow, ...prev])
+    setCurrentPage(1)
+    setActionMessage(`Created user record: ${nextName}.`)
+    closeCreateUserWizard()
   }
 
   const closeAgencyCreateModal = () => {
@@ -721,6 +845,218 @@ export default function SystemAdminCrudPage({
         )}
       />
 
+      {entity === 'users' && isCreateUserWizardOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-2xl rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
+            <div className="border-b border-[#e2e8f0] px-5 py-4">
+              <h2 className="text-[16px] font-extrabold text-slate-900">Create User</h2>
+              <p className="mt-1 text-[12px] text-slate-500">Complete each step to add a new user.</p>
+
+              <div className={`mt-4 grid gap-2 ${isAgencyRole ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                {(isAgencyRole
+                  ? [
+                      { index: 1, label: 'Select User Type' },
+                      { index: 2, label: 'Assign Agency' },
+                      { index: 3, label: 'User Details & Review' },
+                    ]
+                  : [
+                      { index: 1, label: 'Select User Type' },
+                      { index: 3, label: 'User Details & Review' },
+                    ]
+                ).map((step) => {
+                  const isActive = createUserStep === step.index
+                  const isDone = createUserStep > step.index
+
+                  return (
+                    <div
+                      key={step.index}
+                      className={`rounded-[3px] border px-3 py-2 text-center text-[11px] font-bold ${
+                        isActive
+                          ? 'border-[#0b5384] bg-[#0b5384]/10 text-[#0b5384]'
+                          : isDone
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-[#e2e8f0] bg-slate-50 text-slate-500'
+                      }`}
+                    >
+                      {step.label}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 px-5 py-4 md:grid-cols-2">
+              {createUserStep === 1 ? (
+                <>
+                  <FieldLabel label="User Role" full>
+                    <select
+                      value={selectedUserRole}
+                      onChange={(event) => {
+                        const nextRole = event.target.value as MockUserRole | ''
+                        setSelectedUserRole(nextRole)
+                        if (nextRole !== 'Agency') {
+                          setSelectedUserAgencyId('')
+                        }
+                      }}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+                    >
+                      <option value="">Select role</option>
+                      {userRoleOptions.map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  </FieldLabel>
+
+                  <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-3 text-[12px] text-slate-600 md:col-span-2">
+                    <p className="font-semibold text-slate-800">Role guidance</p>
+                    <p className="mt-1">
+                      {selectedUserRole === 'Agency'
+                        ? 'Agency users must be assigned to an agency before entering details.'
+                        : 'Continue to enter details for System Admin or Case Manager roles.'}
+                    </p>
+                  </div>
+                </>
+              ) : null}
+
+              {createUserStep === 2 ? (
+                AGENCIES_DATA.length ? (
+                  <>
+                    <FieldLabel label="Agency" full>
+                      <select
+                        value={selectedUserAgencyId}
+                        onChange={(event) => setSelectedUserAgencyId(event.target.value)}
+                        className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+                      >
+                        <option value="">Select agency</option>
+                        {AGENCIES_DATA.map((agency) => (
+                          <option key={agency.id} value={agency.id}>{agency.name}</option>
+                        ))}
+                      </select>
+                    </FieldLabel>
+
+                    <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2 text-[12px] text-slate-600 md:col-span-2">
+                      Selected agency: <span className="font-semibold text-slate-800">{selectedAgency?.name ?? '-'}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-3 text-[12px] text-slate-600 md:col-span-2">
+                    <p className="font-semibold text-slate-800">No agencies available.</p>
+                    <p className="mt-1">Create an agency first, then return to create an agency user.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeCreateUserWizard()
+                        navigate('/system-admin/agencies')
+                      }}
+                      className="mt-3 h-8 rounded-[3px] border border-[#0b5384]/30 bg-[#0b5384]/10 px-3 text-[11px] font-bold text-[#0b5384] hover:bg-[#0b5384]/20"
+                    >
+                      + Create Agency
+                    </button>
+                  </div>
+                )
+              ) : null}
+
+              {createUserStep === 3 ? (
+                <>
+                  <FieldLabel label="Full Name" full>
+                    <input
+                      type="text"
+                      value={createUserFullName}
+                      onChange={(event) => setCreateUserFullName(event.target.value)}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+                      placeholder="Enter full name"
+                    />
+                  </FieldLabel>
+
+                  <FieldLabel label="Email Address" full>
+                    <input
+                      type="email"
+                      value={createUserEmail}
+                      onChange={(event) => setCreateUserEmail(event.target.value)}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+                      placeholder="name@example.com"
+                    />
+                    {createUserEmail.trim().length > 0 && !isValidEmail(createUserEmail) ? (
+                      <p className="mt-1 text-[11px] font-semibold text-[#b91c1c]">Enter a valid email address.</p>
+                    ) : null}
+                  </FieldLabel>
+
+                  <FieldLabel label="Contact Number" full>
+                    <CountryCodePhoneInput
+                      value={createUserContact}
+                      onChange={setCreateUserContact}
+                    />
+                  </FieldLabel>
+
+                  <FieldLabel label="Temporary Password" full>
+                    <input
+                      type="password"
+                      value={createUserTempPassword}
+                      onChange={(event) => setCreateUserTempPassword(event.target.value)}
+                      className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+                      placeholder="Set a temporary password"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500">Use 8+ characters with 1 uppercase, 1 number, and 1 symbol.</p>
+                    {createUserTempPassword.trim().length > 0 && !isValidTemporaryPassword(createUserTempPassword) ? (
+                      <p className="mt-1 text-[11px] font-semibold text-[#b91c1c]">Temporary password does not meet the requirements.</p>
+                    ) : null}
+                  </FieldLabel>
+
+                  <div className="rounded-[3px] border border-[#e2e8f0] bg-slate-50 px-3 py-2 text-[12px] text-slate-600 md:col-span-2">
+                    <p>
+                      Role: <span className="font-semibold text-slate-800">{selectedUserRole || '-'}</span>
+                    </p>
+                    <p>
+                      Agency: <span className="font-semibold text-slate-800">{selectedAgency?.name ?? (isAgencyRole ? '-' : 'Not required')}</span>
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-[#e2e8f0] px-5 py-3">
+              <button
+                type="button"
+                onClick={closeCreateUserWizard}
+                className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
+              >
+                Cancel
+              </button>
+
+              {createUserStep > 1 ? (
+                <button
+                  type="button"
+                  onClick={goToPreviousUserStep}
+                  className="h-9 rounded-[3px] border border-[#cbd5e1] px-3 text-[12px] font-bold text-slate-700"
+                >
+                  Back
+                </button>
+              ) : null}
+
+              {createUserStep < 3 ? (
+                <button
+                  type="button"
+                  onClick={goToNextUserStep}
+                  disabled={(createUserStep === 1 && !isUserStepOneValid) || (createUserStep === 2 && !isUserStepTwoValid)}
+                  className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={submitCreateUser}
+                  disabled={!isUserStepThreeValid}
+                  className="h-9 rounded-[3px] bg-[#0b5384] px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Create User
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {entity === 'agencies' && editAgencyRow ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 px-4">
           <div className="w-full max-w-xl rounded-[4px] border border-[#cbd5e1] bg-white shadow-xl">
@@ -969,6 +1305,15 @@ function KpiCard({ title, value, accent }: { title: string; value: number; accen
     <div className={`rounded-[4px] border border-[#cbd5e1] border-l-[4px] ${accent} bg-white px-4 py-4 shadow-sm`}>
       <p className={pageHeadingStyles.metricLabel}>{title}</p>
       <p className="mt-2 text-[30px] leading-none font-black text-[#0f172a]">{value}</p>
+    </div>
+  )
+}
+
+function FieldLabel({ label, children, full = false }: { label: string; children: ReactNode; full?: boolean }) {
+  return (
+    <div className={full ? 'md:col-span-2' : ''}>
+      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">{label}</label>
+      {children}
     </div>
   )
 }

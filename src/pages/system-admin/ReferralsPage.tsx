@@ -40,7 +40,6 @@ export default function ReferralsPage() {
   const [selectedAgencyId, setSelectedAgencyId] = useState(initialAgencyId)
   const [serviceValue, setServiceValue] = useState(resolveStakeholderService(initialAgencyId, initialCase?.service))
   const [remarksValue, setRemarksValue] = useState('')
-  const [notesValue, setNotesValue] = useState('')
   const [uploadedDocuments, setUploadedDocuments] = useState<File[]>([])
 
   const availableServices = useMemo(() => getStakeholderServices(selectedAgencyId), [selectedAgencyId])
@@ -61,7 +60,7 @@ export default function ReferralsPage() {
     return rows.filter((item) => {
       const matchesSearch =
         query.length === 0 ||
-        [item.caseNo, item.clientName, item.service, item.agencyName, item.remarks, item.notes].join(' ').toLowerCase().includes(query)
+        [item.caseNo, item.clientName, item.service, item.agencyName, item.remarks].join(' ').toLowerCase().includes(query)
       const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter
       return matchesSearch && matchesStatus
     })
@@ -192,7 +191,6 @@ export default function ReferralsPage() {
   const closeCreateWizard = () => {
     setIsCreateOpen(false)
     setCreateStep(1)
-    setNotesValue('')
     setUploadedDocuments([])
   }
 
@@ -254,7 +252,7 @@ export default function ReferralsPage() {
       createdAt: nowIso,
       updatedAt: nowIso,
       remarks: remarksValue.trim() || 'Referral created by Case Manager.',
-      notes: notesValue.trim() || 'No additional notes provided.',
+      noteHistory: [],
       documents: docs,
     }
 
@@ -262,7 +260,6 @@ export default function ReferralsPage() {
       createManagedReferral(newRow)
       closeCreateWizard()
       setRemarksValue('')
-      setNotesValue('')
       setUploadedDocuments([])
       setRefreshKey((prev) => prev + 1)
     } catch (error) {
@@ -506,15 +503,7 @@ export default function ReferralsPage() {
                     />
                   </FieldLabel>
 
-                  <FieldLabel label="Notes" full>
-                    <textarea
-                      rows={4}
-                      value={notesValue}
-                      onChange={(event) => setNotesValue(event.target.value)}
-                      placeholder="Add referral notes for receiving agency context"
-                      className="w-full rounded-[3px] border border-[#cbd5e1] px-3 py-2 text-[13px] text-slate-700 outline-none"
-                    />
-                  </FieldLabel>
+                  
 
                   <FieldLabel label="Referral Documents" full>
                     <input

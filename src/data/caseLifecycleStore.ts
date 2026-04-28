@@ -706,7 +706,6 @@ function ensureOwwaSupplementalVolume(state: CaseLifecycleState): CaseLifecycleS
       createdAt: caseItem.createdAt,
       updatedAt: caseItem.updatedAt,
       remarks: 'Supplemental OWWA referral generated for reporting volume.',
-      notes: 'Synthetic referral entry to simulate OWWA-heavy workload.',
       documents: [
         {
           id: `doc-${caseItem.id}-1`,
@@ -732,7 +731,6 @@ function ensureOwwaSupplementalVolume(state: CaseLifecycleState): CaseLifecycleS
       updatedAt: followUpUpdatedAt,
       status: primaryReferral.status === 'PENDING' ? 'PROCESSING' : primaryReferral.status,
       remarks: 'Follow-up referral for the same OWWA-managed case.',
-      notes: 'Additional OWWA handling stage for volume simulation.',
     }
 
     return [primaryReferral, followUpReferral]
@@ -983,7 +981,6 @@ export function updateManagedReferralStatus(referralId: string, status: Referral
     status,
     updatedAt: nowIso,
     remarks: remark.trim() || current.remarks,
-    notes: remark.trim() || current.notes,
   }))
 
   // Status updates are tracked in the referral's updatedAt timestamp and notes/remarks
@@ -1007,7 +1004,6 @@ export function appendManagedReferralNote(referralId: string, noteContent: strin
 
   return updateManagedReferral(referralId, (current) => ({
     ...current,
-    notes: trimmedContent,
     updatedAt: nowIso,
     noteHistory: [...(current.noteHistory ?? []), entry],
   }))

@@ -725,7 +725,6 @@ export type CaseManagerReferral = {
   createdAt: string
   updatedAt: string
   remarks: string
-  notes: string
   noteHistory?: CaseManagerReferralNote[]
   documents: Array<{
     id: string
@@ -1160,7 +1159,6 @@ const CASE_MANAGER_REFERRALS: CaseManagerReferral[] = CASE_MANAGER_CASES.map((it
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
   remarks: 'Initial referral from Case Manager queue.',
-  notes: 'Referral endorsement prepared by Case Manager for agency intake and service coordination.',
   documents: [
     {
       id: `doc-${item.id}-1`,
@@ -2269,8 +2267,8 @@ function buildTrackingReferrals(trackedCase: SharedReferralCase): CaseManagerRef
       createdAt,
       updatedAt,
       remarks,
-      notes: 'Tracking projection generated from case service routing.',
       documents: [],
+      
     })
 
     return acc
