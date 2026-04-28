@@ -9,7 +9,6 @@ import {
   getCaseManagerReferrals,
   getAgencyFocalByAgencyId,
   getNextOfKinForClient,
-  getReferralCaseByCaseNo,
   getSpecialCategories,
   toCaseHealthStatus,
   type AddressParts,
@@ -42,8 +41,6 @@ type CaseLifecycleState = {
   milestonesByReferralId: Record<string, ReferralMilestoneEntry[]>
 }
 
-type StoredLifecycleSnapshot = Partial<CaseLifecycleState>
-
 type TrackingAgencyKey = 'owwa' | 'dmw' | 'tesda'
 
 const TRACKING_AGENCY_META: Record<TrackingAgencyKey, { short: string; path: string; subtitle: string }> = {
@@ -63,8 +60,6 @@ const TRACKING_AGENCY_META: Record<TrackingAgencyKey, { short: string; path: str
     subtitle: 'Technical Education and Skills Development Authority Processing',
   },
 }
-
-const TRACKING_AGENCY_ORDER: TrackingAgencyKey[] = ['owwa', 'dmw', 'tesda']
 
 function isTrackingAgencyKey(value: string): value is TrackingAgencyKey {
   return value === 'owwa' || value === 'dmw' || value === 'tesda'
@@ -153,6 +148,19 @@ function toTrackingStatusPresentation(status: ReferralStatus): {
     }
   }
 
+  if (status === 'FOR_COMPLIANCE') {
+    return {
+      label: 'For Compliance',
+      statusTone: 'bg-orange-100 text-orange-700',
+      borderTone: 'border-orange-400',
+      textTone: 'text-orange-600',
+      lineTone: 'bg-orange-500',
+      statusContainerTone: 'bg-orange-50 text-orange-700',
+      statusDotTone: 'bg-orange-500',
+      statusTextTone: 'text-orange-700',
+    }
+  }
+
   if (status === 'COMPLETED') {
     return {
       label: 'Completed',
@@ -210,6 +218,15 @@ function toTrackingSteps(status: ReferralStatus): AgencyStep[] {
     ]
   }
 
+  if (status === 'FOR_COMPLIANCE') {
+    return [
+      { label: 'Referral Sent', state: 'complete' },
+      { label: 'Accepted', state: 'complete' },
+      { label: 'Processing', state: 'active', icon: 'assignment_late' },
+      { label: 'Completed', state: 'pending' },
+    ]
+  }
+
   if (status === 'REJECTED') {
     return [
       { label: 'Referral Sent', state: 'complete' },
@@ -232,6 +249,10 @@ function toAgencyStatusNote(status: ReferralStatus): string {
     return 'Your request is currently being processed by the agency.'
   }
 
+  if (status === 'FOR_COMPLIANCE') {
+    return 'Agency requested additional compliance documents before processing can continue.'
+  }
+
   if (status === 'COMPLETED') {
     return 'Agency processing is complete for this referral.'
   }
@@ -248,6 +269,10 @@ function toLatestMilestoneLabel(status: ReferralStatus): string {
     return 'Agency processing underway.'
   }
 
+  if (status === 'FOR_COMPLIANCE') {
+    return 'Awaiting compliance document submission.'
+  }
+
   if (status === 'COMPLETED') {
     return 'Agency marked referral completed.'
   }
@@ -257,14 +282,6 @@ function toLatestMilestoneLabel(status: ReferralStatus): string {
   }
 
   return 'Pending agency acceptance.'
-}
-
-function getTrackingAgencyPath(agencyId: string): string | undefined {
-  if (!isTrackingAgencyKey(agencyId)) {
-    return undefined
-  }
-
-  return TRACKING_AGENCY_META[agencyId].path
 }
 
 function getAgencyLogoUrl(agencyId?: string): string {
@@ -404,8 +421,8 @@ function buildCaseTimelineForManagedCase(caseRecord: CaseManagerCase, referrals:
 function buildTrackingAgenciesForManagedCase(referrals: CaseManagerReferral[]): TrackingAgencyCardData[] {
   return referrals.map((referral) => {
     const presentation = toTrackingStatusPresentation(referral.status)
-    const isTrackingAgency = isTrackingAgencyKey(referral.agencyId)
-    const meta = isTrackingAgency ? TRACKING_AGENCY_META[referral.agencyId] : undefined
+    const trackingAgencyKey = isTrackingAgencyKey(referral.agencyId) ? referral.agencyId : null
+    const meta = trackingAgencyKey ? TRACKING_AGENCY_META[trackingAgencyKey] : undefined
 
     return {
       name: meta?.short ?? referral.agencyName,
@@ -455,7 +472,7 @@ function getManagedCaseByCaseNo(caseNo: string): CaseManagerCase | undefined {
 }
 
 function getTrackingCaseRecord(trackingId: string): CaseManagerCase | undefined {
-  return getManagedCaseByCaseNo(trackingId) ?? getReferralCaseByCaseNo(trackingId)
+  return getManagedCaseByCaseNo(trackingId)
 }
 
 export function getManagedTrackCasePageData(trackingId: string): TrackCasePageData | null {
@@ -922,8 +939,6 @@ export function createManagedReferral(referralInput: CaseManagerReferral): CaseM
     throw new Error('Unable to create referral. This case is already closed.')
   }
 
-  const nowIso = new Date().toISOString()
-
   const next = updateState((state) => ({
     ...state,
     referrals: [referralInput, ...state.referrals],
@@ -1063,6 +1078,9 @@ export function getManagedLatestUpdate(referralId: string): string {
   // Otherwise, return the referral status
   if (referral.status === 'PROCESSING') {
     return 'Referral Accepted'
+  }
+  if (referral.status === 'FOR_COMPLIANCE') {
+    return 'For Compliance'
   }
   if (referral.status === 'COMPLETED') {
     return 'Referral Completed'

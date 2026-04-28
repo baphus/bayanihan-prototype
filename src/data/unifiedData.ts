@@ -8,10 +8,10 @@ export function getGoogleMapsPlaceUrl(locationQuery: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationQuery)}`
 }
 
-export type ReferralStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+export type ReferralStatus = 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
 export type ClientType = 'Next of Kin' | 'Overseas Filipino Worker'
 export type ReferralActorRole = 'Agency Focal' | 'Case Manager' | 'System'
-export type MockUserRole = 'System Admin' | 'Case Manager' | 'Agency' | 'OFW'
+export type MockUserRole = 'System Admin' | 'Case Manager' | 'Agency'
 
 export type MockAuthUser = {
   email: string
@@ -152,12 +152,6 @@ const MOCK_AUTH_USERS_RAW: MockAuthUser[] = [
     password: 'password123',
     role: 'Agency',
     name: 'Josephus Kim L. Sarsonas',
-  },
-  {
-    email: 'ofw@example.com',
-    password: 'password123',
-    role: 'OFW',
-    name: 'Ricardo J. Mariano',
   },
 ]
 
@@ -836,7 +830,7 @@ function addMinutesToIso(iso: string, minutes: number): string {
 }
 
 function getStatusActivityType(status: ReferralStatus): OversightActivityType {
-  if (status === 'PROCESSING') {
+  if (status === 'PROCESSING' || status === 'FOR_COMPLIANCE') {
     return 'ACCEPTED'
   }
 
@@ -850,6 +844,10 @@ function getStatusActivityType(status: ReferralStatus): OversightActivityType {
 function getStatusRemarks(status: ReferralStatus): string {
   if (status === 'PROCESSING') {
     return 'Initial intake documents verified and accepted.'
+  }
+
+  if (status === 'FOR_COMPLIANCE') {
+    return 'Additional compliance documents were requested from the client.'
   }
 
   if (status === 'COMPLETED') {
@@ -1109,6 +1107,7 @@ export function getStatusBreakdown(cases: CaseManagerCase[]): Record<ReferralSta
     {
       PENDING: 0,
       PROCESSING: 0,
+      FOR_COMPLIANCE: 0,
       COMPLETED: 0,
       REJECTED: 0,
     } as Record<ReferralStatus, number>,
@@ -1850,11 +1849,15 @@ export function getSystemAdminGovernanceHealth(): SystemAdminGovernanceHealth {
 
 export function getAllowedReferralStatusTransitions(currentStatus: ReferralStatus): ReferralStatus[] {
   if (currentStatus === 'PENDING') {
-    return ['PENDING', 'PROCESSING', 'REJECTED']
+    return ['PENDING', 'PROCESSING', 'FOR_COMPLIANCE', 'REJECTED']
   }
 
   if (currentStatus === 'PROCESSING') {
-    return ['PROCESSING', 'COMPLETED', 'REJECTED']
+    return ['PROCESSING', 'FOR_COMPLIANCE', 'COMPLETED', 'REJECTED']
+  }
+
+  if (currentStatus === 'FOR_COMPLIANCE') {
+    return ['FOR_COMPLIANCE', 'PROCESSING', 'COMPLETED', 'REJECTED']
   }
 
   return [currentStatus]
@@ -2049,6 +2052,19 @@ function toTrackingStatusPresentation(status: ReferralStatus): TrackingStatusPre
     }
   }
 
+  if (status === 'FOR_COMPLIANCE') {
+    return {
+      label: 'For Compliance',
+      statusTone: 'bg-orange-100 text-orange-700',
+      borderTone: 'border-orange-500',
+      textTone: 'text-orange-700',
+      lineTone: 'bg-orange-500',
+      statusContainerTone: 'bg-orange-100',
+      statusDotTone: 'bg-orange-700',
+      statusTextTone: 'text-orange-700',
+    }
+  }
+
   if (status === 'COMPLETED') {
     return {
       label: 'Completed',
@@ -2115,6 +2131,15 @@ function toTrackingSteps(status: ReferralStatus, hasReferral: boolean): AgencySt
     ]
   }
 
+  if (status === 'FOR_COMPLIANCE') {
+    return [
+      { label: 'Referral Sent', state: 'complete' },
+      { label: 'Accepted', state: 'complete' },
+      { label: 'Processing', state: 'active', icon: 'assignment_late' },
+      { label: 'Completed', state: 'pending' },
+    ]
+  }
+
   if (status === 'REJECTED') {
     return [
       { label: 'Referral Sent', state: 'complete' },
@@ -2141,6 +2166,10 @@ function toAgencyStatusNote(status: ReferralStatus, hasReferral: boolean): strin
     return 'Your request is currently being processed by the agency.'
   }
 
+  if (status === 'FOR_COMPLIANCE') {
+    return 'Agency requested additional compliance documents before processing can continue.'
+  }
+
   if (status === 'COMPLETED') {
     return 'Agency processing is complete for this referral.'
   }
@@ -2159,6 +2188,10 @@ function toLatestMilestoneLabel(status: ReferralStatus, hasReferral: boolean): s
 
   if (status === 'PROCESSING') {
     return 'Agency processing underway.'
+  }
+
+  if (status === 'FOR_COMPLIANCE') {
+    return 'Awaiting compliance document submission.'
   }
 
   if (status === 'COMPLETED') {
@@ -2218,6 +2251,8 @@ function buildTrackingReferrals(trackedCase: SharedReferralCase): CaseManagerRef
         ? 'Referral sent and awaiting agency acceptance.'
         : trackedCase.status === 'PROCESSING'
           ? 'Referral accepted and currently being processed.'
+          : trackedCase.status === 'FOR_COMPLIANCE'
+            ? 'Referral accepted and awaiting additional compliance documents.'
           : trackedCase.status === 'COMPLETED'
             ? 'Agency interventions completed and documented.'
             : 'Agency reviewed referral and issued rejection.'
@@ -2336,7 +2371,7 @@ function buildCaseTimeline(trackedCase: SharedReferralCase): CaseTimelineItem[] 
       icon: 'send',
     })
 
-    if (referral.status === 'PROCESSING' || referral.status === 'COMPLETED') {
+    if (referral.status === 'PROCESSING' || referral.status === 'FOR_COMPLIANCE' || referral.status === 'COMPLETED') {
       events.push({
         at: referral.status === 'COMPLETED' ? addHours(referral.updatedAt, -2) : referral.updatedAt,
         agency: agencyShort,
@@ -2345,8 +2380,21 @@ function buildCaseTimeline(trackedCase: SharedReferralCase): CaseTimelineItem[] 
         detail:
           referral.status === 'COMPLETED'
             ? 'Agency accepted the referral and initiated service coordination.'
+            : referral.status === 'FOR_COMPLIANCE'
+              ? 'Agency accepted the referral and requested additional compliance documents.'
             : 'Agency accepted the referral and started processing.',
         icon: 'account_circle',
+      })
+    }
+
+    if (referral.status === 'FOR_COMPLIANCE') {
+      events.push({
+        at: referral.updatedAt,
+        agency: agencyShort,
+        agencyId: referral.agencyId,
+        title: `${agencyShort}: For Compliance`,
+        detail: 'Agency set the referral to for compliance and is waiting for required documents.',
+        icon: 'assignment_late',
       })
     }
 
@@ -2431,15 +2479,26 @@ function buildAgencyMilestones(referral: CaseManagerReferral | undefined, agency
     },
   ]
 
-  if (referral.status === 'PROCESSING' || referral.status === 'COMPLETED') {
+  if (referral.status === 'PROCESSING' || referral.status === 'FOR_COMPLIANCE' || referral.status === 'COMPLETED') {
     events.push({
       at: addHours(referral.createdAt, 4),
       title: 'REFERRAL ACCEPTED',
       detail:
         referral.status === 'COMPLETED'
           ? 'Agency accepted the referral and initiated service coordination.'
+          : referral.status === 'FOR_COMPLIANCE'
+            ? 'Agency accepted the referral and requested additional compliance documents.'
           : 'Agency accepted the referral and started processing.',
       state: 'complete',
+    })
+  }
+
+  if (referral.status === 'FOR_COMPLIANCE') {
+    events.push({
+      at: referral.updatedAt,
+      title: 'FOR COMPLIANCE',
+      detail: 'Awaiting compliance documents before processing can continue.',
+      state: 'active',
     })
   }
 

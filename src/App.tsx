@@ -49,9 +49,6 @@ import SystemAdminSystemSettingsPage from './pages/system-admin/SystemSettingsPa
 import RequireRole from './components/auth/RequireRole'
 import RequireTrackingOtp from './components/auth/RequireTrackingOtp'
 import TrackingOtpVerificationPage from './pages/TrackingOtpVerificationPage'
-import OfwMyCasesPage from './pages/ofw/MyCasesPage'
-import OfwLayout from './components/layout/OfwLayout'
-import OfwDashboardPage from './pages/ofw/DashboardPage'
 import EditProfilePage from './pages/shared/EditProfilePage'
 
 export default function App() {
@@ -141,19 +138,6 @@ export default function App() {
           <Route path="security-policies" element={<SystemAdminSecurityPoliciesPage />} />
           <Route path="system-settings" element={<SystemAdminSystemSettingsPage />} />
           <Route path="profile" element={<EditProfilePage />} />
-        </Route>
-
-        <Route
-          path="/ofw"
-          element={(
-            <RequireRole role="OFW">
-              <OfwLayout />
-            </RequireRole>
-          )}
-        >
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<OfwDashboardPage />} />
-          <Route path="my-cases" element={<OfwMyCasesPage />} />
         </Route>
 
         <Route path="/track/:trackerNumber/verify" element={<TrackingOtpVerificationPage />} />

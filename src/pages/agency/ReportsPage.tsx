@@ -13,7 +13,7 @@ type ReferredCase = {
   latestUpdate: string
   createdOn: string
   completedOn?: string
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+  status: 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
 }
 
 type TrendGranularity = 'day' | 'week' | 'month' | 'year'
@@ -264,7 +264,7 @@ export default function ReportsPage() {
 
   const [searchValue, setSearchValue] = useState('')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'>('ALL')
 
   const referredCases: ReferredCase[] = getManagedReferrals().map((item) => ({
     id: item.id,
@@ -337,7 +337,7 @@ export default function ReportsPage() {
   const statusBreakdown = useMemo(() => {
     const total = dateRangeCases.length
     const completed = dateRangeCases.filter((row) => row.status === 'COMPLETED').length
-    const processing = dateRangeCases.filter((row) => row.status === 'PROCESSING').length
+    const processing = dateRangeCases.filter((row) => row.status === 'PROCESSING' || row.status === 'FOR_COMPLIANCE').length
     const pending = dateRangeCases.filter((row) => row.status === 'PENDING').length
     const rejected = dateRangeCases.filter((row) => row.status === 'REJECTED').length
 
@@ -744,13 +744,14 @@ export default function ReportsPage() {
               <select
                 value={statusFilter}
                 onChange={(event) =>
-                  setStatusFilter(event.target.value as 'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED')
+                  setStatusFilter(event.target.value as 'ALL' | 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED')
                 }
                 className="h-10 w-full border border-[#cbd5e1] px-3 text-[13px] font-semibold text-slate-700 outline-none"
               >
                 <option value="ALL">All statuses</option>
                 <option value="PENDING">Pending</option>
                 <option value="PROCESSING">Processing</option>
+                <option value="FOR_COMPLIANCE">For Compliance</option>
                 <option value="COMPLETED">Completed</option>
                 <option value="REJECTED">Rejected</option>
               </select>

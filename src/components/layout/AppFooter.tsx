@@ -1,7 +1,7 @@
 const footerLinks = ['Privacy Policy', 'Terms of Service', 'Accessibility', 'Contact Support']
 
 const footerCoverPhoto = {
-  src: 'https://scontent.fmnl17-1.fna.fbcdn.net/v/t39.30808-6/496152143_993937739573358_7443151477019320533_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=2a1932&_nc_eui2=AeE_UwnM1B96-aSOzdMAqWqMbaNcQANGTPdto1xAA0ZM99kQF5udevN_hAY_fxXd7BqMeGYM3A9vXJOzto-vsEPY&_nc_ohc=dz_gQjHyzZgQ7kNvwGM8Lfl&_nc_oc=AdrWXQV7AMvoycC4ThiuVizzQaBV7IIo2GDNKO6Lve1_yYDCjpoGZTJTXXKpk89VO_g&_nc_zt=23&_nc_ht=scontent.fmnl17-1.fna&_nc_gid=oDGus3kY6fUh7wHGC33DTw&_nc_ss=7a3a8&oh=00_Af0wTt96bnJWzLhju111vbu_qejqdPJXv7H9nxt7loIj6g&oe=69E5DD32',
+  src: 'https://res.cloudinary.com/dzjshue6h/image/upload/v1777288383/496152143_993937739573358_7443151477019320533_n_m1zdel.jpg',
 }
 
 export default function AppFooter() {

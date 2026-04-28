@@ -1,4 +1,4 @@
-export type AgencyStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+export type AgencyStatus = 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
 
 export function getStatusBadgeClass(status: AgencyStatus): string {
   if (status === 'PROCESSING') {
@@ -7,6 +7,10 @@ export function getStatusBadgeClass(status: AgencyStatus): string {
 
   if (status === 'PENDING') {
     return 'border-[#fde68a] bg-[#fef3c7] text-[#b45309]'
+  }
+
+  if (status === 'FOR_COMPLIANCE') {
+    return 'border-[#fed7aa] bg-[#ffedd5] text-[#c2410c]'
   }
 
   if (status === 'COMPLETED') {

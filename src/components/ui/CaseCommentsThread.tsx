@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { formatDisplayDateTime, type CaseManagerReferralNote } from '../../data/unifiedData'
 
 type CaseCommentsThreadProps = {
@@ -98,7 +98,7 @@ export default function CaseCommentsThread({ notes, mostRecentCaseManagerNoteId,
     )
   }
 
-  const renderComment = (note: CaseManagerReferralNote, depth: number, ancestry: Set<string>): JSX.Element | null => {
+  const renderComment = (note: CaseManagerReferralNote, depth: number, ancestry: Set<string>): ReactNode => {
     if (ancestry.has(note.id)) {
       return null
     }

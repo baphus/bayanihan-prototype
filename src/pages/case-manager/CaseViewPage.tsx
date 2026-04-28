@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react'
+import { useMemo, useState, type ReactNode, type ReactElement } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Eye } from 'lucide-react'
 import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
@@ -47,7 +47,7 @@ type ReferralRow = {
   id: string
   referral: CaseManagerReferral
   agency: string
-  referralStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+  referralStatus: 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
   service: string
   latestMilestone: string
   dateReferred: string
@@ -89,6 +89,10 @@ function referralStatusTone(status: ReferralRow['referralStatus']): string {
 
   if (status === 'PROCESSING') {
     return 'border-[#bae6fd] bg-[#e0f2fe] text-[#0369a1]'
+  }
+
+  if (status === 'FOR_COMPLIANCE') {
+    return 'border-[#fed7aa] bg-[#ffedd5] text-[#c2410c]'
   }
 
   if (status === 'COMPLETED') {
@@ -154,6 +158,34 @@ function buildCaseTimeline(
           title: 'Referral Accepted',
           description: 'Agency accepted the referral and started processing.',
           timestamp: withOffsetMinutes(referralRow.dateReferredIso, 30),
+        },
+      )
+      return
+    }
+
+    if (referralRow.referralStatus === 'FOR_COMPLIANCE') {
+      timeline.push(
+        {
+          id: `${referralRow.id}-accepted`,
+          actorType: 'Agency',
+          agency: referralRow.agency,
+          agencyId: referralRow.referral.agencyId,
+          logoType: 'agency',
+          actorName: actors.agencyFocal.name,
+          title: 'Referral Accepted',
+          description: 'Agency accepted the referral and requested compliance documents.',
+          timestamp: withOffsetMinutes(referralRow.dateReferredIso, 30),
+        },
+        {
+          id: `${referralRow.id}-for-compliance`,
+          actorType: 'Agency',
+          agency: referralRow.agency,
+          agencyId: referralRow.referral.agencyId,
+          logoType: 'agency',
+          actorName: actors.agencyFocal.name,
+          title: 'Referral Set to For Compliance',
+          description: 'Additional compliance requirements were requested by the agency.',
+          timestamp: referralRow.updatedAtIso,
         },
       )
       return
@@ -227,7 +259,7 @@ function buildCaseTimeline(
   return timeline
 }
 
-export default function CaseViewPage(): JSX.Element {
+export default function CaseViewPage(): ReactElement {
   const navigate = useNavigate()
   const location = useLocation()
   const { caseId } = useParams<{ caseId: string }>()
@@ -703,7 +735,7 @@ function InfoCell({ label, value, fullRow = false }: { label: string; value: str
   )
 }
 
-function CardSection({ title, children }: { title: string; children: JSX.Element | JSX.Element[] | string }) {
+function CardSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-[3px] border border-[#d8dee8] bg-white p-4 shadow-sm">
       <h3 className={`${pageHeadingStyles.sectionTitle} mb-3 text-[#1f2937]`}>{title}</h3>
@@ -712,7 +744,7 @@ function CardSection({ title, children }: { title: string; children: JSX.Element
   )
 }
 
-function Subsection({ title, children }: { title: string; children: JSX.Element | JSX.Element[] }) {
+function Subsection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-2.5">
       <h4 className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#334155]">{title}</h4>

@@ -19,7 +19,7 @@ import {
   updateManagedReferralStatus,
 } from '../../data/caseLifecycleStore'
 
-type CaseStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+type CaseStatus = 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
 type ClientType = 'Next of Kin' | 'Overseas Filipino Worker'
 type SpecialCategory = 'Senior Citizen' | 'PWD' | 'Solo Parent'
 type UserRole = 'Agency Focal' | 'Case Manager' | 'System Admin' | 'OFW'
@@ -82,7 +82,7 @@ function getAgencyActorLabel(agencyId: string): string {
 }
 
 function isAcceptedStatus(status: CaseStatus): boolean {
-  return status === 'PROCESSING' || status === 'COMPLETED'
+  return status === 'PROCESSING' || status === 'FOR_COMPLIANCE' || status === 'COMPLETED'
 }
 
 function referralStatusTone(status: CaseStatus): string {
@@ -92,6 +92,10 @@ function referralStatusTone(status: CaseStatus): string {
 
   if (status === 'PROCESSING') {
     return 'border-[#bae6fd] bg-[#e0f2fe] text-[#0369a1]'
+  }
+
+  if (status === 'FOR_COMPLIANCE') {
+    return 'border-[#fed7aa] bg-[#ffedd5] text-[#c2410c]'
   }
 
   if (status === 'COMPLETED') {
@@ -234,7 +238,7 @@ function nowLabel(): string {
   }).format(new Date())
 }
 
-function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agencyName: string): TimelineItem[] {
+function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agencyName: string, latestRemark?: string): TimelineItem[] {
   const agencyActor = getAgencyActorLabel(caseData.agencyId)
   const timeline: TimelineItem[] = [
     {
@@ -252,8 +256,20 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
     timeline.push({
       id: `${caseData.caseNo}-processing`,
       agency: agencyName,
-      title: 'Referral was accepted. Remarks: Initial validation completed.',
+      title: `Referral accepted as PROCESSING. Remarks: ${latestRemark?.trim() || 'Initial validation completed.'}`,
       description: 'Status moved to PROCESSING by agency focal.',
+      time: `${caseData.dateUpdated}, 09:20 AM`,
+      actor: agencyActor,
+      logoSrc: agencyLogoSrc,
+    })
+  }
+
+  if (caseData.status === 'FOR_COMPLIANCE') {
+    timeline.push({
+      id: `${caseData.caseNo}-for-compliance`,
+      agency: agencyName,
+      title: `Referral accepted as FOR_COMPLIANCE. Remarks: ${latestRemark?.trim() || 'Additional compliance requirements requested.'}`,
+      description: 'Status moved to FOR_COMPLIANCE by agency focal.',
       time: `${caseData.dateUpdated}, 09:20 AM`,
       actor: agencyActor,
       logoSrc: agencyLogoSrc,
@@ -274,7 +290,7 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
       {
         id: `${caseData.caseNo}-completed`,
         agency: agencyName,
-        title: 'Referral was completed. Remarks: Service delivered successfully.',
+        title: `Referral was completed. Remarks: ${latestRemark?.trim() || 'Service delivered successfully.'}`,
         description: 'Case resolution was recorded by agency focal.',
         time: `${caseData.dateUpdated}, 04:10 PM`,
         actor: agencyActor,
@@ -287,7 +303,7 @@ function buildInitialTimeline(caseData: DetailCase, agencyLogoSrc: string, agenc
     timeline.push({
       id: `${caseData.caseNo}-rejected`,
       agency: agencyName,
-      title: 'Referral was rejected. Remarks: Incomplete requirements submitted.',
+      title: `Referral was rejected. Remarks: ${latestRemark?.trim() || 'Incomplete requirements submitted.'}`,
       description: 'Case was returned for correction and re-submission.',
       time: `${caseData.dateUpdated}, 02:45 PM`,
       actor: agencyActor,
@@ -397,7 +413,10 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const [currentStatus, setCurrentStatus] = useState<CaseStatus>('PENDING')
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
 
-  const [pendingDecision, setPendingDecision] = useState<'PROCESSING' | 'REJECTED' | null>(null)
+  const [pendingDecision, setPendingDecision] = useState<{
+    mode: 'ACCEPT' | 'REJECT'
+    status: 'PROCESSING' | 'FOR_COMPLIANCE' | 'REJECTED'
+  } | null>(null)
   const [decisionRemark, setDecisionRemark] = useState('')
 
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false)
@@ -409,7 +428,8 @@ export default function ReferredCaseViewPage(): JSX.Element {
   const [statusRemark, setStatusRemark] = useState('')
   const [commentDraft, setCommentDraft] = useState('')
   const [replyToNoteId, setReplyToNoteId] = useState<string | null>(null)
-  const attachInputRef = useRef<HTMLInputElement | null>(null)
+  const requirementUploadInputRef = useRef<HTMLInputElement | null>(null)
+  const [pendingRequirementUpload, setPendingRequirementUpload] = useState<{ requirement: string } | null>(null)
   const [activeVersionGroupId, setActiveVersionGroupId] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState('')
 
@@ -570,26 +590,32 @@ export default function ReferredCaseViewPage(): JSX.Element {
     setSaveMessage(`Saved ${nowLabel()}.`)
   }
 
-  const attachDocumentsToReferral = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? [])
-    if (!activeReferral || !files.length) {
+  const requestMissingRequirementUpload = (requirement: string) => {
+    setPendingRequirementUpload({ requirement })
+    requirementUploadInputRef.current?.click()
+  }
+
+  const uploadMissingRequirementDocument = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!activeReferral || !pendingRequirementUpload || !file) {
       return
     }
 
     const nowIso = new Date().toISOString()
+    const normalizedRequirementGroup = normalizeDocumentMatchValue(pendingRequirementUpload.requirement).replace(/\s+/g, '-') || 'requirement'
+    const versionGroupId = `req-${activeReferral.id}-${normalizedRequirementGroup}`
+    const displayName = `${pendingRequirementUpload.requirement} - ${file.name}`
 
     updateManagedReferral(activeReferral.id, (current) => {
       const nextDocuments = [...(current.documents ?? [])]
+      const attachmentId = `doc-${current.id}-requirement-${Date.now()}`
 
-      files.forEach((file, index) => {
-        const attachmentId = `doc-${current.id}-attachment-${Date.now()}-${index}`
-        nextDocuments.push({
-          id: attachmentId,
-          name: file.name,
-          uploadedBy: agencyActor,
-          uploadedAt: nowIso,
-          versionGroupId: attachmentId,
-        })
+      nextDocuments.push({
+        id: attachmentId,
+        name: displayName,
+        uploadedBy: agencyActor,
+        uploadedAt: nowIso,
+        versionGroupId,
       })
 
       return {
@@ -599,23 +625,15 @@ export default function ReferredCaseViewPage(): JSX.Element {
       }
     })
 
-    if (selectedReferral && activeReferral.id === selectedReferral.id) {
-      setTimeline((prev) => [
-        ...prev,
-        {
-          id: `${activeReferral.id}-agency-docs-attached-${Date.now()}`,
-          agency: agencyName,
-          title: 'Referral Documents Attached',
-          description: `${files.length} new referral document${files.length > 1 ? 's were' : ' was'} attached by Agency Focal.`,
-          time: nowLabel(),
-          actor: agencyActor,
-          logoSrc: agencyLogoSrc,
-        },
-      ])
-    }
+    addManagedReferralMilestone(
+      activeReferral.id,
+      'Compliance Document Uploaded',
+      `${pendingRequirementUpload.requirement}: ${displayName}`,
+    )
 
     setRefreshKey((prev) => prev + 1)
     setSaveMessage(`Saved ${nowLabel()}.`)
+    setPendingRequirementUpload(null)
     event.target.value = ''
   }
 
@@ -642,7 +660,8 @@ export default function ReferredCaseViewPage(): JSX.Element {
       setCurrentStatus(freshCase.status)
       const agencyLogoSrc = freshCase.id ? (getCaseAgency(freshCase.id)?.logoUrl ?? BAYANIHAN_LOGO) : BAYANIHAN_LOGO
       const agencyName = freshCase.id ? (getCaseAgency(freshCase.id)?.name ?? 'Agency') : 'Agency'
-      setTimeline([...buildInitialTimeline(freshCase, agencyLogoSrc, agencyName), ...milestoneTimeline])
+      const freshReferral = getManagedReferralById(freshCase.id)
+      setTimeline([...buildInitialTimeline(freshCase, agencyLogoSrc, agencyName, freshReferral?.remarks), ...milestoneTimeline])
     }
   }, [caseId, refreshKey])
 
@@ -662,9 +681,9 @@ export default function ReferredCaseViewPage(): JSX.Element {
       }))
 
       setCurrentStatus(selectedCase.status)
-      setTimeline([...buildInitialTimeline(selectedCase, agencyLogoSrc, agencyName), ...milestoneTimeline])
+      setTimeline([...buildInitialTimeline(selectedCase, agencyLogoSrc, agencyName, selectedReferral?.remarks), ...milestoneTimeline])
     }
-  }, [selectedCase, agencyLogoSrc, agencyName, refreshKey, renderKey])
+  }, [selectedCase, selectedReferral?.remarks, agencyLogoSrc, agencyName, refreshKey, renderKey])
 
   if (!selectedCase) {
     return (
@@ -697,7 +716,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                setPendingDecision('PROCESSING')
+                setPendingDecision({ mode: 'ACCEPT', status: 'PROCESSING' })
                 setDecisionRemark('')
               }}
               className="h-[34px] px-3 bg-[#0b5384] text-white text-[11px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a] transition"
@@ -706,7 +725,7 @@ export default function ReferredCaseViewPage(): JSX.Element {
             </button>
             <button
               onClick={() => {
-                setPendingDecision('REJECTED')
+                setPendingDecision({ mode: 'REJECT', status: 'REJECTED' })
                 setDecisionRemark('')
               }}
               className="h-[34px] px-3 bg-red-50 text-red-700 text-[11px] font-bold rounded-[3px] border border-red-200 hover:bg-red-100 transition"
@@ -840,23 +859,12 @@ export default function ReferredCaseViewPage(): JSX.Element {
 
           <SideCard title="DOCUMENTS">
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[2px] border border-[#d8dee8] bg-[#f8fafc] px-3 py-2">
-                <p className="text-[10px] text-slate-600">Attach additional files for this referral.</p>
-                <button
-                  type="button"
-                  onClick={() => attachInputRef.current?.click()}
-                  className="h-[28px] px-3 bg-[#0b5384] text-white text-[10px] font-bold rounded-[3px] border border-[#0b5384] hover:bg-[#09416a]"
-                >
-                  Attach Document
-                </button>
-                <input
-                  ref={attachInputRef}
-                  type="file"
-                  multiple
-                  onChange={attachDocumentsToReferral}
-                  className="hidden"
-                />
-              </div>
+              <input
+                ref={requirementUploadInputRef}
+                type="file"
+                onChange={uploadMissingRequirementDocument}
+                className="hidden"
+              />
 
               {serviceGroups.map((group) => {
                 const { matches: requirementMatches, unassignedDocuments } = matchRequirementsToDocuments(group.requiredDocuments, activeDocuments)
@@ -909,7 +917,17 @@ export default function ReferredCaseViewPage(): JSX.Element {
                                     </button>
                                   </div>
                                 </div>
-                              ) : null}
+                              ) : (
+                                <div className="mt-2 flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => requestMissingRequirementUpload(requirement)}
+                                    className="h-[26px] px-2.5 bg-[#0b5384] text-white text-[10px] font-bold rounded-[2px] border border-[#0b5384] hover:bg-[#09416a]"
+                                  >
+                                    Upload Requirement
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )
                         })
@@ -1090,7 +1108,18 @@ export default function ReferredCaseViewPage(): JSX.Element {
 
       {pendingDecision ? (
         <DecisionModal
-          title={pendingDecision === 'PROCESSING' ? 'Accept Referral' : 'Reject Referral'}
+          mode={pendingDecision.mode}
+          selectedStatus={pendingDecision.status}
+          onStatusChange={(status) => {
+            if (!pendingDecision || pendingDecision.mode !== 'ACCEPT') {
+              return
+            }
+
+            setPendingDecision({
+              ...pendingDecision,
+              status,
+            })
+          }}
           remark={decisionRemark}
           onRemarkChange={setDecisionRemark}
           onCancel={() => {
@@ -1103,14 +1132,14 @@ export default function ReferredCaseViewPage(): JSX.Element {
               return
             }
 
-            setCurrentStatus(pendingDecision)
-            updateManagedReferralStatus(selectedCase.id, pendingDecision, trimmed)
+            setCurrentStatus(pendingDecision.status)
+            updateManagedReferralStatus(selectedCase.id, pendingDecision.status, trimmed)
             setRefreshKey((prev) => prev + 1)
 
             setPendingDecision(null)
             setDecisionRemark('')
           }}
-          confirmLabel={pendingDecision === 'PROCESSING' ? 'Confirm Accept' : 'Confirm Reject'}
+          confirmLabel={pendingDecision.mode === 'ACCEPT' ? 'Confirm Accept' : 'Confirm Reject'}
         />
       ) : null}
 
@@ -1250,14 +1279,18 @@ function InfoCell({ label, value, fullRow = false }: { label: string; value: str
 }
 
 function DecisionModal({
-  title,
+  mode,
+  selectedStatus,
+  onStatusChange,
   remark,
   onRemarkChange,
   onCancel,
   onConfirm,
   confirmLabel,
 }: {
-  title: string
+  mode: 'ACCEPT' | 'REJECT'
+  selectedStatus: 'PROCESSING' | 'FOR_COMPLIANCE' | 'REJECTED'
+  onStatusChange: (status: 'PROCESSING' | 'FOR_COMPLIANCE') => void
   remark: string
   onRemarkChange: (value: string) => void
   onCancel: () => void
@@ -1268,11 +1301,25 @@ function DecisionModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
       <div className="w-full max-w-lg rounded-[3px] border border-[#cbd5e1] bg-white shadow-xl">
         <div className="border-b border-[#e2e8f0] px-5 py-4">
-          <h2 className="text-[16px] font-extrabold text-slate-900">{title}</h2>
+          <h2 className="text-[16px] font-extrabold text-slate-900">{mode === 'ACCEPT' ? 'Accept Referral' : 'Reject Referral'}</h2>
           <p className="mt-1 text-[12px] text-slate-500">A remark is required before submitting your decision.</p>
         </div>
 
-        <div className="px-5 py-4">
+        <div className="space-y-4 px-5 py-4">
+          {mode === 'ACCEPT' ? (
+            <div>
+              <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Accepted Status</label>
+              <select
+                value={selectedStatus}
+                onChange={(event) => onStatusChange(event.target.value as 'PROCESSING' | 'FOR_COMPLIANCE')}
+                className="h-10 w-full rounded-[3px] border border-[#cbd5e1] px-3 text-[13px] text-slate-700 outline-none"
+              >
+                <option value="PROCESSING">Processing</option>
+                <option value="FOR_COMPLIANCE">For Compliance</option>
+              </select>
+            </div>
+          ) : null}
+
           <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-600">Remark</label>
           <textarea
             value={remark}
@@ -1402,6 +1449,7 @@ function UpdateStatusModal({
             >
               <option value="PENDING">Pending</option>
               <option value="PROCESSING">Processing</option>
+              <option value="FOR_COMPLIANCE">For Compliance</option>
               <option value="COMPLETED">Completed</option>
               <option value="REJECTED">Rejected</option>
             </select>

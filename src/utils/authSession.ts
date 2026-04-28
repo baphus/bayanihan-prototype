@@ -38,10 +38,6 @@ export function getRoleProfileLabel(role: MockUserRole): string {
     return 'Agency Focal Person'
   }
 
-  if (role === 'OFW') {
-    return 'Overseas Filipino Worker'
-  }
-
   return 'Case Manager'
 }
 
@@ -52,10 +48,6 @@ function getDefaultContactNumber(role: MockUserRole): string {
 
   if (role === 'Agency') {
     return '+63 917 100 2002'
-  }
-
-  if (role === 'OFW') {
-    return '+63 917 100 2004'
   }
 
   return '+63 917 100 2003'

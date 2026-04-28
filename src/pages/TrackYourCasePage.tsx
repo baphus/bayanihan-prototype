@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, ArrowRight, ShieldCheck, Ticket } from 'lucide-react'
+import { Search, ArrowRight, Ticket } from 'lucide-react'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
 import FaqSection from '../components/FaqSection'

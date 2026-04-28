@@ -13,7 +13,7 @@ type ReferredCase = {
   service: string
   latestUpdate: string
   createdOn: string
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+  status: 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
 }
 
 function formatIsoToTableTimestamp(iso: string): string {
@@ -191,7 +191,7 @@ export default function ReferredCasesPage(): JSX.Element {
 
   const filteredData = useMemo(() => {
     return data.filter(row => {
-      const searchTerms = [row.caseNo, row.clientName, row.service, row.milestone, row.createdOn, row.updatedOn].join(' ').toLowerCase()
+      const searchTerms = [row.caseNo, row.clientName, row.service, row.latestUpdate, row.createdOn, row.status].join(' ').toLowerCase()
       const matchesSearch = searchTerms.includes(searchValue.toLowerCase())
       
       const statusFilter = activeFilters.find(f => f.key === 'status')
@@ -205,7 +205,7 @@ export default function ReferredCasesPage(): JSX.Element {
     return {
       total: data.length,
       pending: data.filter((row) => row.status === 'PENDING').length,
-      processing: data.filter((row) => row.status === 'PROCESSING').length,
+      processing: data.filter((row) => row.status === 'PROCESSING' || row.status === 'FOR_COMPLIANCE').length,
       completed: data.filter((row) => row.status === 'COMPLETED').length,
     }
   }, [data])
@@ -274,6 +274,7 @@ export default function ReferredCasesPage(): JSX.Element {
                   <option value="">All Statuses</option>
                   <option value="PENDING">Pending</option>
                   <option value="PROCESSING">Processing</option>
+                  <option value="FOR_COMPLIANCE">For Compliance</option>
                   <option value="COMPLETED">Completed</option>
                 </select>
               </div>

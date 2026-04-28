@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { REFERRAL_CASES, getReferralCaseByCaseNo } from '../data/unifiedData'
+import type { ReferralStatus } from '../data/unifiedData'
 import { buildFaqList, findFaqByInput } from '../data/faqData'
 
 type ChatSender = 'ai' | 'user'
@@ -41,13 +42,17 @@ function getTrackCasePath(caseNo: string): string {
   return `/track/${encodeURIComponent(caseNo)}`
 }
 
-function getAgencyProgressSummary(status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'): string {
+function getAgencyProgressSummary(status: ReferralStatus): string {
   if (status === 'PENDING') {
     return 'OWWA intake is queued, while DMW and TESDA updates are waiting for the next action.'
   }
 
   if (status === 'PROCESSING') {
     return 'OWWA is actively coordinating and cross-agency updates are in progress with DMW/TESDA.'
+  }
+
+  if (status === 'FOR_COMPLIANCE') {
+    return 'OWWA requested compliance documents and is waiting for required submissions before continuing processing.'
   }
 
   if (status === 'COMPLETED') {
@@ -89,13 +94,17 @@ function buildCaseSummaryMessage(targetCase: ReturnType<typeof getReferralCaseBy
   }
 }
 
-function formatStatusLabel(status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'): string {
+function formatStatusLabel(status: ReferralStatus): string {
   if (status === 'PENDING') {
     return 'Pending'
   }
 
   if (status === 'PROCESSING') {
     return 'Processing'
+  }
+
+  if (status === 'FOR_COMPLIANCE') {
+    return 'For Compliance'
   }
 
   if (status === 'COMPLETED') {

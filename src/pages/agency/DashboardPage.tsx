@@ -40,7 +40,7 @@ export default function DashboardPage() {
 
   const assignedCount = recentReferrals.length
   const pendingCount = recentReferrals.filter((item) => item.status === 'PENDING').length
-  const processingCount = recentReferrals.filter((item) => item.status === 'PROCESSING').length
+  const processingCount = recentReferrals.filter((item) => item.status === 'PROCESSING' || item.status === 'FOR_COMPLIANCE').length
   const completedCount = recentReferrals.filter((item) => item.status === 'COMPLETED').length
 
   const recentReferralsColumns: Column<ReferralRowData>[] = [

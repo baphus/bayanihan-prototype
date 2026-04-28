@@ -20,7 +20,7 @@ type ReportCase = {
   latestUpdate: string
   createdOn: string
   completedOn?: string
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+  status: 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
 }
 
 type ReportManagedCase = {
@@ -38,7 +38,7 @@ type ReportManagedCase = {
   lastCountry?: string
   provinceName?: string
   municipalityName: string
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+  status: 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'
   createdOn: string
   updatedOn: string
 }
@@ -289,7 +289,7 @@ function uniqueSorted(values: string[]): string[] {
 }
 
 function matchesLocationScope(
-  row: { regionName: string; provinceName: string; municipalityName: string },
+  row: { regionName: string; provinceName?: string; municipalityName?: string },
   regionFilter: string,
   provinceFilter: string,
   municipalityFilter: string,
@@ -298,11 +298,11 @@ function matchesLocationScope(
     return false
   }
 
-  if (provinceFilter !== 'ALL' && row.provinceName !== provinceFilter) {
+  if (provinceFilter !== 'ALL' && (row.provinceName || 'Unknown') !== provinceFilter) {
     return false
   }
 
-  if (municipalityFilter !== 'ALL' && row.municipalityName !== municipalityFilter) {
+  if (municipalityFilter !== 'ALL' && (row.municipalityName || 'Unknown') !== municipalityFilter) {
     return false
   }
 
@@ -410,7 +410,7 @@ export default function ReportsPage() {
 
   const [searchValue, setSearchValue] = useState('')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED'>('ALL')
   const [reportAgencyScope, setReportAgencyScope] = useState('ALL')
   const [agencyFilter, setAgencyFilter] = useState('ALL')
   const [reportRegionScope, setReportRegionScope] = useState('ALL')
@@ -670,7 +670,7 @@ export default function ReportsPage() {
   const kpiData = useMemo(() => {
     const totalReferrals = scopedDateRangeCases.length
     const totalCases = scopedManagedCasesInRange.length
-    const openCases = scopedManagedCasesInRange.filter((row) => row.status === 'PENDING' || row.status === 'PROCESSING').length
+    const openCases = scopedManagedCasesInRange.filter((row) => row.status === 'PENDING' || row.status === 'PROCESSING' || row.status === 'FOR_COMPLIANCE').length
     const closedCasesCount = scopedManagedCasesInRange.filter((row) => row.status === 'COMPLETED' || row.status === 'REJECTED').length
     const completedReferrals = scopedDateRangeCases.filter((row) => row.status === 'COMPLETED').length
     const averageReferralCompletionRate = totalReferrals > 0 ? (completedReferrals / totalReferrals) * 100 : 0
@@ -730,7 +730,7 @@ export default function ReportsPage() {
   const statusBreakdown = useMemo(() => {
     const total = scopedDateRangeCases.length || 1
     const completed = scopedDateRangeCases.filter((row) => row.status === 'COMPLETED').length
-    const processing = scopedDateRangeCases.filter((row) => row.status === 'PROCESSING').length
+    const processing = scopedDateRangeCases.filter((row) => row.status === 'PROCESSING' || row.status === 'FOR_COMPLIANCE').length
     const pending = scopedDateRangeCases.filter((row) => row.status === 'PENDING').length
     const rejected = scopedDateRangeCases.filter((row) => row.status === 'REJECTED').length
 
@@ -745,7 +745,7 @@ export default function ReportsPage() {
   const casesStatusStats = useMemo(() => {
     const cases = scopedManagedCasesInRange
     const total = cases.length || 1
-    const open = cases.filter(row => row.status === 'PENDING' || row.status === 'PROCESSING').length
+    const open = cases.filter(row => row.status === 'PENDING' || row.status === 'PROCESSING' || row.status === 'FOR_COMPLIANCE').length
     const closed = cases.filter(row => row.status === 'COMPLETED' || row.status === 'REJECTED').length
 
     return [
@@ -964,17 +964,23 @@ export default function ReportsPage() {
   }, [serviceStats, scopedDateRangeCases.length])
 
   const caseTrendRows = useMemo<ReportCase[]>(() => {
-    return getManagedCases().map((item) => ({
-      id: item.id,
-      caseNo: item.caseNo,
-      clientName: item.clientName,
-      agencyName: item.agencyName,
-      service: item.service,
-      latestUpdate: item.milestone,
-      createdOn: item.createdAt.slice(0, 10),
-      completedOn: item.status === 'COMPLETED' || item.status === 'REJECTED' ? item.updatedAt.slice(0, 10) : undefined,
-      status: item.status,
-    }))
+    return getManagedCases().map((item) => {
+      const location = resolveLocation(item.ofwProfile?.address)
+      return {
+        id: item.id,
+        caseNo: item.caseNo,
+        clientName: item.clientName,
+        agencyName: item.agencyName,
+        regionName: location.regionName,
+        provinceName: location.provinceName,
+        municipalityName: location.municipalityName,
+        service: item.service,
+        latestUpdate: item.milestone,
+        createdOn: item.createdAt.slice(0, 10),
+        completedOn: item.status === 'COMPLETED' || item.status === 'REJECTED' ? item.updatedAt.slice(0, 10) : undefined,
+        status: item.status,
+      }
+    })
   }, [])
 
   const scopedCaseTrendRows = useMemo(() => {
@@ -2031,13 +2037,14 @@ export default function ReportsPage() {
                 <select
                   value={statusFilter}
                   onChange={(event) =>
-                    setStatusFilter(event.target.value as 'ALL' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'REJECTED')
+                    setStatusFilter(event.target.value as 'ALL' | 'PENDING' | 'PROCESSING' | 'FOR_COMPLIANCE' | 'COMPLETED' | 'REJECTED')
                   }
                   className="h-10 w-full border border-[#cbd5e1] px-3 text-[13px] font-semibold text-slate-700 outline-none"
                 >
                   <option value="ALL">All statuses</option>
                   <option value="PENDING">Pending</option>
                   <option value="PROCESSING">Processing</option>
+                  <option value="FOR_COMPLIANCE">For Compliance</option>
                   <option value="COMPLETED">Completed</option>
                   <option value="REJECTED">Rejected</option>
                 </select>

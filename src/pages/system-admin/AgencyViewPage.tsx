@@ -234,7 +234,7 @@ export default function AgencyViewPage() {
       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
         <Link to="/system-admin/agencies" className="hover:text-[#0b5384] transition">Agencies</Link>
         <span className="mx-2">&gt;</span>
-        <span>{agency.short}</span>
+        <span>{agencyState.short}</span>
       </div>
 
       <header className="flex flex-wrap items-start justify-between gap-3">

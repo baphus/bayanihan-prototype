@@ -58,19 +58,6 @@ function formatCaseAge(timestamp: string): string {
   return `${Math.max(1, ageInMinutes)} min`
 }
 
-function formatReferredToSummary(referredTo: string): string {
-  const agencies = referredTo
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-  if (agencies.length <= 1) {
-    return agencies[0] ?? 'N/A'
-  }
-
-  return `${agencies[0]} +${agencies.length - 1} more`
-}
-
 export default function CasesPage() {
   const navigate = useNavigate()
   const [searchValue, setSearchValue] = useState('')
