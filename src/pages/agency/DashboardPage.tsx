@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { type Column } from '../../components/ui/UnifiedTable'
 import { RecentTable } from '../../components/ui/RecentTable'
 import NotificationBell from '../../components/ui/NotificationBell'
+import AgencyFeedbacksPanel from '../../components/AgencyFeedbacksPanel'
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass, type AgencyStatus } from './statusBadgeStyles'
 import { useNavigate } from 'react-router-dom'
@@ -157,6 +158,9 @@ export default function DashboardPage() {
 
         {/* Right Column */}
         <div className="col-span-12 lg:col-span-4">
+          <div className="mb-4">
+            <AgencyFeedbacksPanel />
+          </div>
           <section className="bg-white border border-[#d8dee8] rounded-[2px] p-4 mb-4">
             <h3 className={`${pageHeadingStyles.sectionTitle} mb-3`}>Quick Actions</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">

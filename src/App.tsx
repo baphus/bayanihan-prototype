@@ -29,6 +29,7 @@ import AgencyDashboardPage from './pages/agency/DashboardPage'
 import AgencyServicesPage from './pages/agency/ServicesPage'
 import AgencyReferredCasesPage from './pages/agency/ReferredCasesPage'
 import AgencyReferredCaseViewPage from './pages/agency/ReferredCaseViewPage'
+import AgencyFeedbacksPage from './pages/agency/FeedbacksPage'
 import AgencyReportsPage from './pages/agency/ReportsPage'
 import AgencyActivityLogsPage from './pages/agency/ActivityLogsPage'
 import SystemAdminLayout from './components/layout/SystemAdminLayout'
@@ -101,6 +102,7 @@ export default function App() {
           <Route path="dashboard" element={<AgencyDashboardPage />} />
           <Route path="referred-cases" element={<AgencyReferredCasesPage />} />
           <Route path="referred-cases/:caseId" element={<AgencyReferredCaseViewPage />} />
+          <Route path="feedbacks" element={<AgencyFeedbacksPage />} />
           <Route path="referrals/:referralId" element={<ReferralViewPage />} />
           <Route path="services" element={<AgencyServicesPage />} />
           <Route path="reports" element={<AgencyReportsPage />} />

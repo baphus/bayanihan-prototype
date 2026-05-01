@@ -19,32 +19,6 @@ export type AgencyData = {
 
 export const AGENCIES_DATA: AgencyData[] = [
   {
-    id: 'dmw',
-    short: 'DMW',
-    name: 'Department of Migrant Workers',
-    logoUrl: 'https://dmw.gov.ph/images/dmw_logo.png',
-    description:
-      'The executive department of the Philippine government responsible for the protection of the rights and promote the welfare of Overseas Filipino Workers (OFWs) and their families.',
-    email: 'info@dmw.gov.ph',
-    contact: '1348 (Hotline)',
-    locationQuery: 'Department of Migrant Workers Regional Office VII, Cebu City, Central Visayas, Philippines',
-    services: [
-      {
-        id: 'oec',
-        title: 'Overseas Employment Certificate (OEC)',
-        description:
-          'A document required for all departing OFWs serving as proof that they were processed by the DMW.',
-        requiredDocuments: ['Valid Passport', 'Valid Work Visa/Permit', 'Employment Contract', 'Sworn Statement'],
-      },
-      {
-        id: 'repatriation',
-        title: 'Repatriation Assistance',
-        description: 'Help provided to distressed OFWs by bringing them back to the Philippines.',
-        requiredDocuments: ['Passport / Travel Document', 'Request Form', 'Proof of Identity/Employment'],
-      },
-    ],
-  },
-  {
     id: 'owwa',
     short: 'OWWA',
     name: 'Overseas Workers Welfare Administration',
@@ -105,6 +79,32 @@ export const AGENCIES_DATA: AgencyData[] = [
         description:
           'Provides orientation and post-arrival guidance for OFWs transitioning back to local communities.',
         requiredDocuments: ['Valid ID', 'Attendance Registration Form'],
+      },
+    ],
+  },
+  {
+    id: 'dmw',
+    short: 'DMW',
+    name: 'Department of Migrant Workers',
+    logoUrl: 'https://dmw.gov.ph/images/dmw_logo.png',
+    description:
+      'The executive department of the Philippine government responsible for the protection of the rights and promote the welfare of Overseas Filipino Workers (OFWs) and their families.',
+    email: 'info@dmw.gov.ph',
+    contact: '1348 (Hotline)',
+    locationQuery: 'Department of Migrant Workers Regional Office VII, Cebu City, Central Visayas, Philippines',
+    services: [
+      {
+        id: 'oec',
+        title: 'Overseas Employment Certificate (OEC)',
+        description:
+          'A document required for all departing OFWs serving as proof that they were processed by the DMW.',
+        requiredDocuments: ['Valid Passport', 'Valid Work Visa/Permit', 'Employment Contract', 'Sworn Statement'],
+      },
+      {
+        id: 'repatriation',
+        title: 'Repatriation Assistance',
+        description: 'Help provided to distressed OFWs by bringing them back to the Philippines.',
+        requiredDocuments: ['Passport / Travel Document', 'Request Form', 'Proof of Identity/Employment'],
       },
     ],
   },

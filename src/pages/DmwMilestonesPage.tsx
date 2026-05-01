@@ -1,13 +1,52 @@
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
 import TrackingNotFoundState from '../components/TrackingNotFoundState'
-import { getManagedAgencyMilestonePageData } from '../data/caseLifecycleStore'
+import { getManagedAgencyMilestonePageData, getManagedTrackCasePageData } from '../data/caseLifecycleStore'
+import { getFeedbackByCase, submitFeedback, type FeedbackEntry } from '../data/feedbackData'
 
 export default function DmwMilestonesPage() {
   const { trackerNumber } = useParams()
   const cleanTrackerNumber = trackerNumber ? decodeURIComponent(trackerNumber).trim() : ''
   const pageData = cleanTrackerNumber ? getManagedAgencyMilestonePageData('dmw', cleanTrackerNumber) : null
+  const casePageData = cleanTrackerNumber ? getManagedTrackCasePageData(cleanTrackerNumber) : null
+
+  const [feedbackList, setFeedbackList] = useState<FeedbackEntry[]>([])
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [feedbackRating, setFeedbackRating] = useState(4)
+  const [feedbackComments, setFeedbackComments] = useState('')
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
+
+  useEffect(() => {
+    if (pageData?.caseId) {
+      const allFeedback = getFeedbackByCase(pageData.caseId)
+      setFeedbackList(allFeedback)
+    }
+  }, [pageData?.caseId])
+
+  const isCompleted = pageData?.referralStatus === 'COMPLETED'
+  const hasExistingFeedback = feedbackList.length > 0
+
+  function handleSubmitFeedback(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!pageData?.caseId) return
+
+    setIsSubmittingFeedback(true)
+    try {
+      submitFeedback(pageData.caseId, feedbackRating, feedbackComments, pageData?.referralServices)
+      const updated = getFeedbackByCase(pageData.caseId)
+      setFeedbackList(updated)
+      setIsFeedbackModalOpen(false)
+      setFeedbackRating(4)
+      setFeedbackComments('')
+    } catch (err) {
+      // swallow for demo
+    } finally {
+      setIsSubmittingFeedback(false)
+    }
+  }
 
   if (!pageData) {
     return (
@@ -21,7 +60,7 @@ export default function DmwMilestonesPage() {
     )
   }
 
-  const trackingId = pageData.infoRows.find((row) => row.label === 'Tracking ID')?.value ?? cleanTrackerNumber
+  const trackingId = pageData.trackingId || pageData.infoRows.find((row) => row.label === 'Tracking ID')?.value || cleanTrackerNumber
 
   return (
     <div className="bg-surface font-body text-on-surface">
@@ -54,33 +93,115 @@ export default function DmwMilestonesPage() {
 
         <section className="grid grid-cols-1 gap-8 lg:grid-cols-12">
           <div className="space-y-[44px] lg:col-span-8">
+            {/* Unified Referral Timeline */}
             <article className="border-l-[3px] border-primary bg-white px-[28px] py-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
               <h2 className="mb-6 flex items-center gap-3 border-b border-surface-container-high pb-[18px] font-base text-[11px] font-black uppercase tracking-[0.14em] text-primary">
                 <span className="material-symbols-outlined text-[18px]">timeline</span>
-                Milestone Timeline
+                Referral Timeline
               </h2>
 
-              <div className="relative ml-2 mt-4 space-y-12 pb-8">
+              <div className="relative ml-2 mt-4 space-y-8 pb-8">
                 <div className="absolute left-[7px] top-2 bottom-6 w-[1.5px] bg-[#c1c7d1]/60" />
 
-                {pageData.milestones.map((milestone) => (
-                  <article key={`${milestone.title}-${milestone.time}`} className="relative pl-10">
-                    <div className={`absolute left-[0.5px] top-[2px] h-3.5 w-3.5 rounded-full ring-4 ${milestone.dotTone} bg-clip-padding`} />
-                    <div className="mb-[4px] flex flex-col items-start justify-between gap-1 sm:flex-row">
-                      <h3 className={`text-[10px] font-bold leading-[1.3] text-on-surface ${milestone.titleTone === 'text-on-surface-variant' ? 'opacity-70' : ''}`}>
-                        {milestone.title}
-                      </h3>
-                      <span className="text-[7.5px] font-extrabold uppercase tracking-[0.1em] text-primary">
-                        {milestone.time}
-                      </span>
-                    </div>
-                    <p className={`whitespace-pre-wrap text-[9px] leading-[1.4] text-slate-500`}>
-                      {milestone.detail}
-                    </p>
-                  </article>
-                ))}
+                {(() => {
+                  // Merge milestones and status updates, sorted by date
+                  const mergedTimeline = [
+                    ...pageData.milestones.map((m) => ({
+                      type: 'milestone' as const,
+                      title: m.title,
+                      detail: m.detail,
+                      time: m.time,
+                      timeObj: new Date(m.time || 0),
+                      dotTone: m.dotTone,
+                      titleTone: m.titleTone,
+                    })),
+                    ...(casePageData?.caseTimeline || []).map((item) => ({
+                      type: 'status' as const,
+                      title: item.title,
+                      detail: item.detail,
+                      date: item.date,
+                      timeObj: new Date(item.date),
+                      agency: item.agency,
+                    })),
+                  ].sort((a, b) => b.timeObj.getTime() - a.timeObj.getTime())
+
+                  return mergedTimeline.map((item, idx) =>
+                    item.type === 'milestone' ? (
+                      <article key={`milestone-${item.title}-${item.time}`} className="relative pl-10">
+                        <div className={`absolute left-[0.5px] top-[2px] h-3.5 w-3.5 rounded-full ring-4 ${item.dotTone} bg-clip-padding`} />
+                        <div className="mb-[4px] flex flex-col items-start justify-between gap-1 sm:flex-row">
+                          <h3 className={`text-[10px] font-bold leading-[1.3] text-on-surface ${item.titleTone === 'text-on-surface-variant' ? 'opacity-70' : ''}`}>
+                            {item.title}
+                          </h3>
+                          <span className="text-[7.5px] font-extrabold uppercase tracking-[0.1em] text-primary">
+                            {item.time}
+                          </span>
+                        </div>
+                        <p className={`whitespace-pre-wrap text-[9px] leading-[1.4] text-slate-500`}>
+                          {item.detail}
+                        </p>
+                      </article>
+                    ) : (
+                      <article key={`status-${idx}`} className="relative pl-10">
+                        <div className="absolute left-[0.5px] top-[2px] h-3.5 w-3.5 rounded-full ring-4 ring-blue-100 bg-blue-500" />
+                        <div className="mb-[4px] flex flex-col items-start justify-between gap-1 sm:flex-row">
+                          <h3 className="text-[10px] font-bold leading-[1.3] text-on-surface">
+                            {item.title}
+                          </h3>
+                          <span className="text-[7.5px] font-extrabold uppercase tracking-[0.1em] text-blue-600">
+                            {new Date(item.date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-[9px] leading-[1.4] text-slate-600">{item.detail}</p>
+                        {item.agency && <p className="text-[8px] text-slate-500 mt-1">Agency: {item.agency}</p>}
+                      </article>
+                    )
+                  )
+                })()}
               </div>
             </article>
+
+            {/* Feedback Section */}
+            {isCompleted && (
+              <article className="border-l-[3px] border-emerald-500 bg-white px-[28px] py-[24px] shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+                <h2 className="mb-6 flex items-center gap-3 border-b border-surface-container-high pb-[18px] font-base text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                  <span className="material-symbols-outlined text-[18px]">rate_review</span>
+                  Your Feedback
+                </h2>
+
+                <div className="space-y-4">
+                  {!hasExistingFeedback && (
+                    <div className="text-center py-6">
+                      <p className="text-[11px] text-slate-600 mb-4">Share your experience with this agency to help them improve their services.</p>
+                      <button
+                        type="button"
+                        onClick={() => setIsFeedbackModalOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 text-white px-6 py-2 text-[11px] font-bold uppercase tracking-wider hover:brightness-110 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">rate_review</span>
+                        Submit Feedback
+                      </button>
+                    </div>
+                  )}
+
+                  {hasExistingFeedback && (
+                    <>
+                      <div className="rounded-lg bg-emerald-50 p-4 border border-emerald-200">
+                        <p className="text-[11px] text-slate-600 mb-3">Feedback submitted: <span className="font-bold text-slate-900">{feedbackList[0]?.overallRating?.toFixed(1) || feedbackList[0]?.rating.toFixed(2)}/5</span></p>
+                        <button
+                          type="button"
+                          onClick={() => setIsViewModalOpen(true)}
+                          className="inline-flex items-center gap-2 rounded border border-emerald-600 text-emerald-700 px-4 py-2 text-[10px] font-bold uppercase hover:bg-emerald-50 transition"
+                        >
+                          <span className="material-symbols-outlined text-[12px]">visibility</span>
+                          View Details
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </article>
+            )}
 
           </div>
 
@@ -161,6 +282,119 @@ export default function DmwMilestonesPage() {
           </aside>
         </section>
       </main>
+
+      {/* Feedback Modal */}
+      {isFeedbackModalOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/40 p-4 flex items-center justify-center">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h3 className="text-sm font-bold text-slate-900">Submit Feedback</h3>
+              <p className="text-xs text-slate-500 mt-1">{pageData?.locationName}</p>
+            </div>
+
+            <form onSubmit={handleSubmitFeedback} className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block mb-2">Rating (1-5)</label>
+                <select
+                  value={feedbackRating}
+                  onChange={(event) => setFeedbackRating(Number(event.target.value))}
+                  className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary focus:outline-none"
+                >
+                  {[1, 2, 3, 4, 5].map((score) => (
+                    <option key={score} value={score}>{score}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block mb-2">Comments (optional)</label>
+                <textarea
+                  value={feedbackComments}
+                  onChange={(event) => setFeedbackComments(event.target.value)}
+                  placeholder="Share your experience..."
+                  rows={3}
+                  className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFeedbackModalOpen(false)}
+                  className="flex-1 rounded border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingFeedback}
+                  className="flex-1 rounded bg-primary px-4 py-2 text-xs font-bold uppercase text-white hover:brightness-110 disabled:opacity-50 transition"
+                >
+                  Submit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Feedback Modal */}
+      {isViewModalOpen && hasExistingFeedback && (
+        <div className="fixed inset-0 z-[60] bg-black/40 p-4 flex items-center justify-center overflow-y-auto">
+          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl my-8">
+            <div className="border-b border-slate-200 px-5 py-4 sticky top-0 bg-white">
+              <h3 className="text-sm font-bold text-slate-900">Your Feedback</h3>
+              <p className="text-xs text-slate-500 mt-1">{pageData?.locationName}</p>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {feedbackList.map((feedback) => (
+                <div key={feedback.id} className="space-y-4">
+                  {/* Rating */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-700">Rating</span>
+                    <span className="text-[13px] font-bold text-primary">{feedback.overallRating?.toFixed(1) || feedback.rating.toFixed(2)}/5</span>
+                  </div>
+
+                  {/* Services Applied */}
+                  {feedback.serviceName && (
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-700 mb-2">Service Applied</p>
+                      <div className="inline-block px-2.5 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded">
+                        {feedback.serviceName}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Submission Date */}
+                  <div className="flex items-center justify-between text-[10px] text-slate-500">
+                    <span>Submitted:</span>
+                    <span>{new Date(feedback.createdAt).toLocaleDateString()}</span>
+                  </div>
+
+                  {/* Comments */}
+                  {feedback.comments && (
+                    <div className="pt-2 border-t border-slate-200">
+                      <p className="text-[10px] font-bold text-slate-700 mb-1.5">Comments</p>
+                      <p className="text-[11px] text-slate-600 leading-relaxed italic">{feedback.comments}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-slate-200 px-5 py-4 sticky bottom-0 bg-white">
+              <button
+                type="button"
+                onClick={() => setIsViewModalOpen(false)}
+                className="w-full rounded border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase text-slate-700 hover:bg-slate-50 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AppFooter />
     </div>

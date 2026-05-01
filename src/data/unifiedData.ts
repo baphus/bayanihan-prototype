@@ -2006,6 +2006,10 @@ export type AgencyMilestonePageData = {
   locationContact: string
   milestones: MilestoneItem[]
   infoRows: MilestoneInfoRow[]
+  caseId: string
+  trackingId: string
+  referralStatus: string
+  referralServices: string
 }
 
 export type TrackCasePageData = {
@@ -2574,6 +2578,10 @@ export function getAgencyMilestonePageData(agency: TrackingAgencyKey, trackingId
     locationContact: agencyRecord?.contact ?? 'N/A',
     milestones: buildAgencyMilestones(referral, referral.agencyName, trackedCase.caseNo),
     infoRows: buildMilestoneInfoRows(trackedCase),
+    caseId: trackedCase.id,
+    trackingId: trackedCase.caseNo,
+    referralStatus: status,
+    referralServices: referral.service ?? 'General Service',
   }
 }
 
