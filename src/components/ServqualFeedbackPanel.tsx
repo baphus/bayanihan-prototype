@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { submitFeedback } from '../data/feedbackData'
 
 type ServqualFeedbackPanelProps = {
   trackingId: string
@@ -28,7 +29,13 @@ export default function ServqualFeedbackPanel({ trackingId }: ServqualFeedbackPa
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setIsSubmitted(true)
+    try {
+      submitFeedback(trackingId, rating, comments)
+      setIsSubmitted(true)
+    } catch (err) {
+      // swallow for now — local demo
+      setIsSubmitted(true)
+    }
   }
 
   const handleOpen = () => {

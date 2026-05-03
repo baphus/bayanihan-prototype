@@ -524,6 +524,10 @@ export function getManagedAgencyMilestonePageData(agency: TrackingAgencyKey, tra
     locationContact: getCaseManagerAgencies().find((item) => item.id === agency)?.contact ?? managedCase.agencyId,
     milestones: buildMilestonesForManagedReferral(referral),
     infoRows: buildMilestoneInfoRows(managedCase),
+    caseId: managedCase.id,
+    trackingId: managedCase.caseNo,
+    referralStatus: referral.status,
+    referralServices: referral.service,
   }
 }
 

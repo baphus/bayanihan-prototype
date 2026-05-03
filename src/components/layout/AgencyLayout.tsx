@@ -8,6 +8,7 @@ import { clearActiveRole, getActiveUserProfile, getRoleProfileLabel, subscribeTo
 const navigation = [
   { name: 'Dashboard', href: '/agency/dashboard', icon: LayoutDashboard },
   { name: 'Referred Cases', href: '/agency/referred-cases', icon: ClipboardList },
+  { name: 'Feedbacks', href: '/agency/feedbacks', icon: ClipboardList },
   { name: 'Services', href: '/agency/services', icon: Briefcase },
   { name: 'Reports', href: '/agency/reports', icon: BarChart3 },
   { name: 'Activity', href: '/agency/activity', icon: History },
