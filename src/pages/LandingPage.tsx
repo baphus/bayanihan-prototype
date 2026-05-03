@@ -164,7 +164,7 @@ export default function LandingPage() {
 
       <main>
         <HeroSection
-          title="Connecting Government Services Through One Tracking Number"
+          title="Connecting Government Services Through One Window"
           description="A unified platform for inter-agency referrals, ensuring secure, transparent, and efficient assistance for migrant workers and their families."
           onTrackAction={scrollToTracker}
         />
