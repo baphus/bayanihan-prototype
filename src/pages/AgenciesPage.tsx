@@ -12,36 +12,48 @@ export default function AgenciesPage() {
     <div className="flex min-h-screen flex-col bg-surface font-body text-on-surface">
       <AppHeader />
 
-      <main className="flex-1 px-8 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-12 text-center">
-            <h1 className="font-headline text-4xl font-extrabold text-primary">Our Partner Agencies (Region VII)</h1>
-            <p className="mx-auto mt-4 max-w-2xl text-on-surface-variant text-lg">
-              Explore the services provided by our network of partner agencies in Region VII, dedicated to serving and protecting our citizens at home and abroad.
-            </p>
+      <main className="flex-1">
+        {/* Simplified Hero for Agencies */}
+        <section className="relative flex min-h-[300px] w-full items-center justify-center overflow-hidden py-20 bg-primary">
+          <div className="absolute inset-0 z-0">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/90 to-primary-container/30"></div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="relative z-10 mx-auto w-full max-w-7xl px-4 text-center md:px-8">
+            <div className="mx-auto max-w-3xl">
+              <p className="mb-2 text-sm font-bold uppercase tracking-widest text-white/70">Coordinated Assistance</p>
+              <h1 className="mb-4 font-headline text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl">
+                Our Partner Agencies
+              </h1>
+              <p className="mx-auto max-w-2xl text-lg leading-relaxed text-white/80">
+                Explore the network of government agencies and units in Region VII working together through the Bayanihan One Window system.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <div className="mx-auto max-w-7xl px-8 pb-24">
+          <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 -mt-10 relative z-20">
             {AGENCIES_DATA.map((agency) => (
               <div 
                 key={agency.id} 
-                className="group flex cursor-pointer flex-col rounded-none border border-outline-variant/30 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
+                className="group flex cursor-pointer flex-col rounded-none border border-outline-variant/30 bg-surface shadow-2xl transition-all duration-300 hover:-translate-y-1"
                 onClick={() => navigate(`/agencies/${agency.id}`)}
               >
-                <div className="flex flex-col items-center justify-center text-center mb-3">
-                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-surface-container-lowest shadow-sm mb-3 border border-outline-variant/30 transition-transform duration-300 group-hover:scale-105">
+                <div className="flex flex-col items-center justify-center text-center p-6 border-b border-outline-variant/30">
+                  <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-none bg-white shadow-sm mb-4 border border-outline-variant/30 transition-transform duration-300 group-hover:scale-105">
                     <img src={agency.logoUrl} alt={`${agency.short} Logo`} className="h-full w-full object-contain p-1" />
                   </div>
                   <h2 className="font-headline text-sm font-bold text-primary leading-tight h-10 flex items-center justify-center">
                     {agency.name}
                   </h2>
                 </div>
-                <div className="flex-1 flex flex-col">
-                  <p className="text-[10px] text-on-surface-variant flex-1 mb-3 line-clamp-3 text-center">
+                <div className="flex-1 flex flex-col p-6 bg-surface-container-lowest/50">
+                  <p className="text-[11px] text-on-surface-variant flex-1 mb-4 line-clamp-3 text-center leading-relaxed">
                     {agency.description}
                   </p>
                   
-                  <div className="mb-3 overflow-hidden rounded-none border border-outline-variant/30 bg-surface-container-lowest h-[60px] transition-colors duration-300 group-hover:bg-primary/5">
+                  <div className="mb-4 overflow-hidden rounded-none border border-outline-variant/30 bg-surface-container-lowest h-[80px] grayscale group-hover:grayscale-0 transition-all duration-300">
                     <iframe
                       title={`${agency.name} map preview`}
                       src={getGoogleMapsEmbedUrl(agency.locationQuery)}
@@ -51,25 +63,22 @@ export default function AgenciesPage() {
                     />
                   </div>
 
-                  <div className="space-y-1.5 mb-4 bg-surface-container-lowest p-2 rounded-none border border-outline-variant/20">
-                    <div className="flex items-center gap-2 text-[10px] text-on-surface">
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary">
-                        <span className="material-symbols-outlined text-[10px]">mail</span>
-                      </div>
+                  <div className="space-y-2 mb-6 bg-surface-container-highest/20 p-3 rounded-none border border-outline-variant/20">
+                    <div className="flex items-center gap-2 text-[10px] text-on-surface font-medium">
+                      <span className="material-symbols-outlined text-[14px] text-primary">mail</span>
                       <span className="truncate">{agency.email}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] text-on-surface">
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary">
-                        <span className="material-symbols-outlined text-[10px]">call</span>
-                      </div>
+                    <div className="flex items-center gap-2 text-[10px] text-on-surface font-medium">
+                      <span className="material-symbols-outlined text-[14px] text-primary">call</span>
                       <span className="truncate">{agency.contact}</span>
                     </div>
                   </div>
+                  
                   <AppButton 
                     type="button" 
-                    variant="outline" 
+                    variant="primary" 
                     size="md"
-                    className="w-full mt-auto rounded-none border-primary text-primary hover:!bg-primary hover:!text-white transition-colors text-[10px] py-2"
+                    className="w-full mt-auto rounded-none text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       navigate(`/agencies/${agency.id}`)

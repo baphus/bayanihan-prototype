@@ -156,13 +156,7 @@ function getTrendGranularity(totalDays: number): TrendGranularity {
   return 'year'
 }
 
-function getLinePointX(index: number, points: number, width = 530, inset = 20): number {
-  if (points <= 1) {
-    return width / 2
-  }
 
-  return inset + index * ((width - inset * 2) / (points - 1))
-}
 
 function buildTrendData(from: Date, to: Date, rows: ReportCase[]) {
   const totalDays = Math.max(1, differenceInDays(from, to) + 1)
@@ -347,57 +341,44 @@ function toAgeGroup(age: number | null): string {
   return '60+'
 }
 
-function buildLinePath(series: number[], width: number, height: number, inset = 20) {
-  if (series.length === 0) {
-    return ''
-  }
 
-  const min = Math.min(...series)
-  const max = Math.max(...series)
-  const range = Math.max(1, max - min)
-  return series
-    .map((value, index) => {
-      const x = getLinePointX(index, series.length, width, inset)
-      const y = inset + (1 - (value - min) / range) * (height - inset * 2)
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
-    })
-    .join(' ')
-}
 
-function PieChart({ data, className = "w-16 h-16" }: { data: { label: string; count: number; hex: string }[], className?: string }) {
-  const total = data.reduce((sum, item) => sum + item.count, 0) || 1;
-  let cumulativePercent = 0;
-  
+import { Chart as ChartJS, ArcElement, Tooltip, Legend as ChartLegend, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler } from "chart.js"
+import { Pie, Line, Bar } from "react-chartjs-2"
+ChartJS.register(ArcElement, Tooltip, ChartLegend, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Filler)
+
+function PieChart({ data, className = "w-32 h-32" }: { data: { label: string; count: number; hex: string }[], className?: string }) {
+  const chartData = useMemo(() => ({
+    labels: data.map(d => d.label),
+    datasets: [
+      {
+        data: data.map(d => d.count),
+        backgroundColor: data.map(d => d.hex),
+        borderColor: data.map(() => '#ffffff'),
+        borderWidth: 2,
+        hoverOffset: 4,
+      }
+    ]
+  }), [data])
+
+  const options = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => ` ${context.label}: ${context.raw}`
+        }
+      }
+    }
+  }), [])
+
   return (
-    <svg viewBox="0 0 63.6619772 63.6619772" className={`${className} -rotate-90 rounded-full shrink-0`}>
-      <circle cx="31.8309886" cy="31.8309886" r="31.8309886" fill="#f1f5f9" />
-      {data.map(item => {
-        const pct = (item.count / total) * 100;
-        const offset = 100 - cumulativePercent;
-        const strokeDasharray = `${pct} ${100 - pct}`;
-        cumulativePercent += pct;
-        
-        if (pct === 0) return null;
-        
-        return (
-          <circle
-            key={item.label}
-            r="15.915494309189533"
-            cx="31.8309886"
-            cy="31.8309886"
-            fill="transparent"
-            stroke={item.hex}
-            strokeWidth="31.8309886"
-            strokeDasharray={strokeDasharray}
-            strokeDashoffset={offset}
-            className="cursor-pointer hover:opacity-80 transition-opacity outline-none"
-          >
-            <title>{item.label}: {item.count}</title>
-          </circle>
-        );
-      })}
-    </svg>
-  );
+    <div className={className}>
+      <Pie data={chartData} options={options} />
+    </div>
+  )
 }
 
 export default function ReportsPage() {
@@ -423,7 +404,7 @@ export default function ReportsPage() {
   const [referralsCurrentPage, setReferralsCurrentPage] = useState(1)
   const [referralsRowsPerPage, setReferralsRowsPerPage] = useState(10)
   const [casesChartView, setCasesChartView] = useState<CasesChartView>('line')
-  const [casesHoveredIndex, setCasesHoveredIndex] = useState<number | null>(null)
+
 
   const managedCases = useMemo(() => getManagedCases(), [])
   const managedCasesByCaseNo = useMemo(
@@ -995,54 +976,8 @@ export default function ReportsPage() {
     () => buildTrendData(activeFromDate, activeToDate, scopedCaseTrendRows),
     [activeFromDate, activeToDate, scopedCaseTrendRows],
   )
-  const casesLinePath = useMemo(() => buildLinePath(casesTrendData.series, 530, 220), [casesTrendData.series])
-  const casesChartGeometry = useMemo(() => {
-    const minValue = Math.min(...casesTrendData.series, 0)
-    const maxValue = Math.max(...casesTrendData.series, 1)
-    const range = Math.max(1, maxValue - minValue)
 
-    const points = casesTrendData.series.map((value, idx) => {
-      const x = getLinePointX(idx, casesTrendData.series.length)
-      const y = 20 + (1 - (value - minValue) / range) * (220 - 40)
-      return {
-        x,
-        y,
-        value,
-        label: casesTrendData.labels[idx],
-      }
-    })
 
-    const slotWidth = points.length > 1 ? points[1].x - points[0].x : 44
-    const barWidth = Math.max(4, Math.min(22, slotWidth - 2, slotWidth * 0.72))
-    const baselineY = 20 + (1 - (minValue - minValue) / range) * (220 - 40)
-
-    return {
-      points,
-      minValue,
-      maxValue,
-      range,
-      slotWidth,
-      barWidth,
-      baselineY,
-    }
-  }, [casesTrendData])
-  const casesAreaPath = useMemo(() => {
-    if (casesChartGeometry.points.length === 0 || !casesLinePath) {
-      return ''
-    }
-
-    const first = casesChartGeometry.points[0]
-    const last = casesChartGeometry.points[casesChartGeometry.points.length - 1]
-    return `${casesLinePath} L ${last.x.toFixed(1)} ${casesChartGeometry.baselineY.toFixed(1)} L ${first.x.toFixed(1)} ${casesChartGeometry.baselineY.toFixed(1)} Z`
-  }, [casesChartGeometry, casesLinePath])
-
-  const casesTrendLabelStep = useMemo(() => {
-    if (casesTrendData.labels.length <= 8) {
-      return 1
-    }
-
-    return Math.ceil(casesTrendData.labels.length / 6)
-  }, [casesTrendData.labels.length])
 
   const casesTrendTitle =
     casesTrendData.granularity === 'day'
@@ -1681,128 +1616,94 @@ export default function ReportsPage() {
               </div>
             </div>
           </div>
-          <div className="relative">
-            {casesHoveredIndex !== null && casesChartGeometry.points[casesHoveredIndex] ? (
-              <div className="pointer-events-none absolute right-2 top-2 z-10 rounded-[3px] border border-[#dbe7f3] bg-white/95 px-2.5 py-1.5 shadow-sm">
-                <p className="text-[11px] font-medium text-slate-600">
-                  {casesChartGeometry.points[casesHoveredIndex].label}
-                </p>
-                <p className="text-[14px] font-bold text-[#0b5a8c]">
-                  {casesChartGeometry.points[casesHoveredIndex].value} case(s)
-                </p>
-              </div>
-            ) : null}
-
-            <svg
-              width="100%"
-              viewBox="0 0 530 220"
-              preserveAspectRatio="none"
-              className="h-[220px]"
-              onMouseLeave={() => setCasesHoveredIndex(null)}
-            >
-              <defs>
-                <linearGradient id="cases-area-gradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0b5a8c" stopOpacity="0.22" />
-                  <stop offset="100%" stopColor="#0b5a8c" stopOpacity="0.02" />
-                </linearGradient>
-              </defs>
-
-              {[0, 1, 2, 3, 4].map((idx) => (
-                <line
-                  key={`cases-grid-${idx}`}
-                  x1="20"
-                  x2="510"
-                  y1={30 + idx * 40}
-                  y2={30 + idx * 40}
-                  stroke="#e2e8f0"
-                  strokeWidth="1"
-                />
-              ))}
-
-              <g fill="#64748b" fontSize="9" fontWeight="600">
-                {[0, 1, 2, 3, 4].map((idx) => {
-                  const y = 30 + idx * 40
-                  const value = (casesChartGeometry.maxValue - (casesChartGeometry.range / 4) * idx).toFixed(0)
-                  return (
-                    <text key={`cases-y-${idx}`} x="4" y={y + 2}>
-                      {value}
-                    </text>
-                  )
-                })}
-              </g>
-
-              {casesChartView === 'line' && casesAreaPath ? (
-                <path d={casesAreaPath} fill="url(#cases-area-gradient)" />
-              ) : null}
-
-              {casesChartView === 'line' ? (
-                <>
-                  <path d={casesLinePath} fill="none" stroke="#0b5a8c" strokeWidth="1.8" strokeLinecap="round" />
-                  {casesChartGeometry.points.map((point, idx) => {
-                    const isHovered = casesHoveredIndex === idx
-                    return (
-                      <circle
-                        key={`cases-pt-${idx}`}
-                        cx={point.x}
-                        cy={point.y}
-                        r={isHovered ? 3.6 : 2.2}
-                        fill={isHovered ? '#075985' : '#0b5a8c'}
-                      />
-                    )
-                  })}
-                </>
-              ) : (
-                <>
-                  {casesChartGeometry.points.map((point, idx) => {
-                    const isHovered = casesHoveredIndex === idx
-                    const barHeight = Math.max(0, casesChartGeometry.baselineY - point.y)
-                    if (barHeight <= 0) {
-                      return null
+          <div className="relative h-[220px]">
+            {casesChartView === 'line' ? (
+              <Line 
+                data={{
+                  labels: casesTrendData.labels,
+                  datasets: [{
+                    label: 'Cases',
+                    data: casesTrendData.series,
+                    borderColor: '#0b5a8c',
+                    backgroundColor: 'rgba(11, 90, 140, 0.22)',
+                    borderWidth: 1.8,
+                    pointRadius: 2.2,
+                    pointHoverRadius: 3.6,
+                    fill: true,
+                    tension: 0.1
+                  }]
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: { label: (c) => ` ${c.raw} case(s)` }
                     }
-
-                    return (
-                      <rect
-                        key={`cases-bar-${idx}`}
-                        x={point.x - casesChartGeometry.barWidth / 2}
-                        y={point.y}
-                        width={casesChartGeometry.barWidth}
-                        height={barHeight}
-                        rx="3"
-                        fill={isHovered ? '#075985' : '#0b5a8c'}
-                        opacity={isHovered ? 0.95 : 0.82}
-                      />
-                    )
-                  })}
-                </>
-              )}
-
-              {casesChartGeometry.points.map((point, idx) => (
-                <rect
-                  key={`cases-hit-${idx}`}
-                  x={point.x - casesChartGeometry.slotWidth / 2}
-                  y="18"
-                  width={casesChartGeometry.slotWidth}
-                  height="186"
-                  fill="transparent"
-                  onMouseEnter={() => setCasesHoveredIndex(idx)}
-                />
-              ))}
-
-              <g fill="#64748b" fontSize="9" fontWeight="500">
-                {casesTrendData.labels.map((label, index) => {
-                  const shouldRender = index % casesTrendLabelStep === 0 || index === casesTrendData.labels.length - 1
-                  if (!shouldRender) {
-                    return null
+                  },
+                  scales: {
+                    x: {
+                      grid: { display: false },
+                      ticks: {
+                        autoSkip: true,
+                        maxTicksLimit: 8,
+                        color: '#64748b'
+                      }
+                    },
+                    y: {
+                      grid: { color: '#e2e8f0' },
+                      border: { display: false },
+                      ticks: {
+                        color: '#64748b',
+                        precision: 0
+                      }
+                    }
                   }
-
-                  return (
-                    <text key={`cases-${label}-${index}`} x={getLinePointX(index, casesTrendData.labels.length) - 12} y="214">
-                      {label}
-                    </text>
-                  )
-                })}
-              </g>
-            </svg>
+                }}
+              />
+            ) : (
+              <Bar 
+                data={{
+                  labels: casesTrendData.labels,
+                  datasets: [{
+                    label: 'Cases',
+                    data: casesTrendData.series,
+                    backgroundColor: '#0b5a8c',
+                    hoverBackgroundColor: '#075985',
+                    borderRadius: 3,
+                  }]
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: { label: (c) => ` ${c.raw} case(s)` }
+                    }
+                  },
+                  scales: {
+                    x: {
+                      grid: { display: false },
+                      ticks: {
+                        autoSkip: true,
+                        maxTicksLimit: 8,
+                        color: '#64748b'
+                      }
+                    },
+                    y: {
+                      grid: { color: '#e2e8f0' },
+                      border: { display: false },
+                      ticks: {
+                        color: '#64748b',
+                        precision: 0
+                      }
+                    }
+                  }
+                }}
+              />
+            )}
           </div>
         </article>
       </section>

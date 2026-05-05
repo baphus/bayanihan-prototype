@@ -26,7 +26,7 @@ export default function AuditLogsPage() {
     <ActivityTimelineView
       pageTitle="Audit Logs"
       pageSubtitle="Comprehensive trail of case management actions and system events."
-      sectionTitle="Case Management Audit"
+      sectionTitle=""
       exportFileName="cm-audit-logs"
       logs={logs}
     />

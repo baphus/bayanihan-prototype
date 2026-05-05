@@ -30,12 +30,12 @@ export default function TrackerInput({
             value={trackerNumber}
             onChange={(event) => onTrackerChange(event.target.value)}
             placeholder="Enter Tracking Number"
-            className="w-full border border-white/20 bg-white/10 px-4 py-4 text-white placeholder:text-white/70 focus:border-secondary-container focus:outline-none focus:ring-1 focus:ring-secondary-container md:px-6 md:py-5"
+            className="w-full border border-outline bg-surface-container px-4 py-4 rounded-none text-on-surface placeholder:text-on-surface-variant/60 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary md:px-6 md:py-5"
             aria-label="Tracker Number"
           />
         </div>
 
-        {errorMessage ? <p className="text-sm text-red-200">{errorMessage}</p> : null}
+        {errorMessage ? <p className="text-sm text-error font-medium">{errorMessage}</p> : null}
 
         <AppButton
           type="submit"

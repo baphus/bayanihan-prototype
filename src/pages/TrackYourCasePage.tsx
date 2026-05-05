@@ -1,112 +1,94 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search, ArrowRight, Ticket } from 'lucide-react'
-import AppFooter from '../components/layout/AppFooter'
-import AppHeader from '../components/layout/AppHeader'
-import FaqSection from '../components/FaqSection'
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import AppFooter from "../components/layout/AppFooter"
+import AppHeader from "../components/layout/AppHeader"
+import TrackerInput from "../components/TrackerInput"
+import FaqSection from "../components/FaqSection"
 
 export default function TrackYourCasePage() {
   const navigate = useNavigate()
-  const [trackerNumber, setTrackerNumber] = useState('')
-  const [inputError, setInputError] = useState('')
+  const [trackerNumber, setTrackerNumber] = useState("")
+  const [inputError, setInputError] = useState("")
 
-  const handleTrackSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleTrackSubmit = () => {
     const normalizedTrackingId = trackerNumber.trim().toUpperCase()
 
     if (!normalizedTrackingId) {
-      setInputError('Please enter your Tracking ID.')
+      setInputError("Please enter your Tracking ID.")
       return
     }
 
     if (!/^OW-[A-Z0-9]{7}$/.test(normalizedTrackingId)) {
-      setInputError('Tracking ID must be in the format OW-XXXXXXX.')
+      setInputError("Tracking ID must be in the format OW-XXXXXXX.")
       return
     }
 
-    setInputError('')
-    navigate(`/track/${encodeURIComponent(normalizedTrackingId)}/verify`)
+    setInputError("")
+    navigate(`/track/${encodeURIComponent(normalizedTrackingId)}`)
+  }
+
+  const handleTrackerChange = (value: string) => {
+    setTrackerNumber(value.toUpperCase())
+    if (inputError) {
+      setInputError("")
+    }
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 font-body text-slate-900">
+    <div className="flex min-h-screen flex-col bg-surface font-body text-on-surface">
       <AppHeader />
 
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-16 bg-gradient-to-b from-slate-50 to-slate-100">
-        <div className="w-full max-w-3xl flex flex-col items-center text-center">
-          
-          <h1 className="mb-4 text-4xl sm:text-5xl font-black uppercase text-[#111827] tracking-tight">
-            Track Your Case
-          </h1>
-          
-          <p className="mb-10 max-w-xl text-sm sm:text-base text-slate-500">
-            Enter your unique case tracking number below to view the
-            real-time status and history of your OFW application or
-            request across all partner agencies.
-          </p>
-          
-          {/* Main Card */}
-          <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-6 sm:p-10 mb-10 text-left relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#0b5c92] to-[#00A59B]" />
-            
-            <div className="flex items-center gap-2 mb-6 text-slate-800 font-bold text-sm uppercase tracking-widest">
-              <Ticket className="w-5 h-5 text-[#0b5c92]" />
-              Tracking Details
+      <main className="flex-1">
+        <section className="relative flex min-h-[400px] w-full items-center justify-center overflow-hidden py-20 bg-primary">
+          <div className="absolute inset-0 z-0">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/90 to-primary-container/30"></div>
+          </div>
+
+          <div className="relative z-10 mx-auto w-full max-w-7xl px-4 text-center md:px-8">
+            <div className="mx-auto max-w-3xl">
+              <h1 className="mb-4 font-headline text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl">
+                Track Your Case
+              </h1>
+              <p className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-white/80">
+                Enter your unique case tracking number below to view the
+                real-time status and history of your OFW application or
+                request safely across all partner agencies.
+              </p>
             </div>
-            
-            <form onSubmit={handleTrackSubmit}>
-              <div className="relative mb-3">
-                <input
-                  type="text"
-                  placeholder="Enter Tracking ID (e.g., OW-A7K2M9Q)"
-                  pattern="OW-[A-Za-z0-9]{7}"
-                  className="w-full bg-slate-50 rounded-xl border border-slate-200 py-4 pl-5 pr-14 text-base font-medium focus:outline-none focus:ring-2 focus:ring-[#0b5c92] focus:border-[#0b5c92] text-slate-800 transition-shadow placeholder:text-slate-400"
-                  value={trackerNumber}
-                  onChange={(e) => {
-                    setTrackerNumber(e.target.value.toUpperCase())
-                    if (inputError) {
-                      setInputError('')
-                    }
-                  }}
-                />
-                <button
-                  type="submit"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white bg-[#0b5c92] hover:bg-[#084b77] rounded-lg p-2 transition-colors flex items-center justify-center"
-                >
-                  <Search className="w-5 h-5" />
-                </button>
+          </div>
+        </section>
+
+        <section className="relative -mt-16 pb-24 px-4">
+          <div className="mx-auto max-w-3xl">
+            <div className="bg-surface p-6 shadow-2xl border border-outline-variant/30">
+              <div className="mb-6 flex items-center gap-3 border-b border-outline-variant pb-4">
+                <span className="material-symbols-outlined text-primary text-2xl">confirmation_number</span>
+                <h2 className="font-headline text-lg font-bold text-on-surface">Tracking ID Details</h2>
               </div>
               
-              <p className="text-xs text-slate-500 mb-8 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[14px]">info</span>
-                Tracking IDs are typically found on your acknowledgment receipt or sent via SMS/Email.
-              </p>
+              <TrackerInput
+                trackerNumber={trackerNumber}
+                errorMessage={inputError}
+                onTrackerChange={handleTrackerChange}
+                onSubmit={handleTrackSubmit}
+                isDisabled={false}
+              />
 
-              {inputError ? (
-                <div className="mb-6 rounded-lg bg-red-50 p-4 border border-red-100">
-                  <p className="text-sm font-semibold text-red-600 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[18px]">error</span>
-                    {inputError}
-                  </p>
+              <div className="mt-8 bg-surface-container-highest/30 p-4">
+                <div className="flex gap-3">
+                  <span className="material-symbols-outlined text-primary text-[20px]">info</span>
+                  <div className="text-sm text-on-surface-variant leading-relaxed">
+                    <p className="font-semibold text-primary mb-1">Where can I find my Tracking ID?</p>
+                    <p>Tracking IDs (e.g., OW-A7K2M9Q) are typically found on your acknowledgment receipt or sent via SMS/Email after your initial case intake.</p>
+                  </div>
                 </div>
-              ) : null}
-              
-              <button
-                type="submit"
-                className="w-full rounded-xl bg-[#0b5c92] text-white py-4 font-bold text-sm uppercase tracking-widest hover:bg-[#084b77] transition-colors flex items-center justify-center gap-2 shadow-sm"
-              >
-                Track Case Status
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
+              </div>
+            </div>
           </div>
-          
-        </div>
-      </main>
+        </section>
 
-      <div className="w-full">
-        <FaqSection categories={['Tracking Your Case']} />
-      </div>
+        <FaqSection />
+      </main>
 
       <AppFooter />
     </div>

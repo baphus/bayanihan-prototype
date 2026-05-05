@@ -208,7 +208,7 @@ export const AGENCIES_DATA: AgencyData[] = [
     short: 'LCI',
     name: 'Law Center Inc.',
     logoUrl:
-      'https://scontent.fmnl17-3.fna.fbcdn.net/v/t39.30808-6/413828932_753218590185204_121817884749243877_n.jpg?_nc_cat=106&ccb=1-7&_nc_sid=1d70fc&_nc_eui2=AeG4d-FHCG5FkkFNaXkEbsCC2ylW9wL31hDbKVb3AvfWEN64cWvf_anFGC_Vox-GOeCQFyFvU1GKKTx8tewmdRaQ&_nc_ohc=wH77THYVjEAQ7kNvwEKnKsQ&_nc_oc=AdoIoxVXPxZR-iEBEuh5CcoEEJMeGoYpNFssYe6qlxxNBeZZJEgZmqN0uCavquH-6Ro&_nc_zt=23&_nc_ht=scontent.fmnl17-3.fna&_nc_gid=ystlRfRE6icx7c_mKish2A&_nc_ss=7a3a8&oh=00_Af33mETElhBpCTpeSWoqoajibD7eUsXm4q01AMitkb9kdQ&oe=69E5D45B',
+      'https://res.cloudinary.com/dzjshue6h/image/upload/v1777940090/413828932_753218590185204_121817884749243877_n_hyzme6.jpg',
     description:
       'A legal aid and advocacy partner that provides legal counseling, documentation support, and case referrals for vulnerable clients.',
     email: 'helpdesk@lawcenterinc.org',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import HeroSection from '../components/HeroSection'
+import LogoMarquee from '../components/ui/LogoMarquee'
 import TrackerInput from '../components/TrackerInput'
 import AppFooter from '../components/layout/AppFooter'
 import AppHeader from '../components/layout/AppHeader'
@@ -166,8 +167,17 @@ export default function LandingPage() {
         <HeroSection
           title="Connecting Government Services Through One Window"
           description="A unified platform for inter-agency referrals, ensuring secure, transparent, and efficient assistance for migrant workers and their families."
-          onTrackAction={scrollToTracker}
+          onTrackAction={() => navigate('/track')}
         />
+
+        <section className="bg-surface py-12">
+          <div className="container mx-auto px-8">
+            <h3 className="text-center font-headline text-sm font-bold uppercase tracking-widest text-on-surface-variant/70 mb-8">
+              Trusted by Partner Agencies & Stakeholders
+            </h3>
+            <LogoMarquee />
+          </div>
+        </section>
 
         <section id="features" className="bg-surface-container px-8 py-24">
           <div className="mx-auto max-w-7xl">
