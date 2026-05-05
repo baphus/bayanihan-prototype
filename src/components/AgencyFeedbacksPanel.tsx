@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { UnifiedTable, type Column } from './ui/UnifiedTable'
+import { useNavigate } from 'react-router-dom'
 import {
   getAgencyServqualConfig,
   getFeedbackByAgency,
@@ -13,6 +14,7 @@ import { AGENCIES_DATA } from '../data/agenciesData'
 
 type Props = {
   agencyId?: string
+  isConcise?: boolean
 }
 
 type DimensionMetric = {
@@ -22,8 +24,9 @@ type DimensionMetric = {
   gapScore: number
 }
 
-export default function AgencyFeedbacksPanel({ agencyId }: Props) {
+export default function AgencyFeedbacksPanel({ agencyId, isConcise = false }: Props) {
   const effectiveAgencyId = agencyId ?? AGENCIES_DATA[0].id
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [selectedService, setSelectedService] = useState('all')
   const [sortKey, setSortKey] = useState<'date' | 'score'>('date')
@@ -321,6 +324,44 @@ export default function AgencyFeedbacksPanel({ agencyId }: Props) {
 
     updateAgencyServqualConfig(effectiveAgencyId, questionnaireService, cleaned)
     setIsQuestionModalOpen(false)
+  }
+
+  if (isConcise) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-[14px] font-bold text-slate-900 uppercase tracking-wider">Feedbacks Overview</h3>
+              <p className="mt-1 text-[12px] text-slate-500">Quick glimpse of agency feedback scores.</p>
+            </div>
+            <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined text-[18px]">forum</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <div className="rounded-lg bg-slate-50 p-4 border border-slate-100 flex flex-col items-center justify-center">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total Received</p>
+              <h4 className="text-2xl font-black text-slate-800">{overview.totalFeedbacks}</h4>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-4 border border-slate-100 flex flex-col items-center justify-center">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Avg Rating</p>
+              <h4 className="text-2xl font-black text-slate-800">{overview.avgPerception.toFixed(2)}</h4>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/agency/feedbacks')}
+            className="mt-2 w-full flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[12px] font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-primary transition-all active:scale-[0.98]"
+          >
+            <span>VIEW FULL FEEDBACKS</span>
+            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+          </button>
+        </div>
+      </section>
+    )
   }
 
   return (

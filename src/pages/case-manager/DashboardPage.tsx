@@ -134,7 +134,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 text-white/60 text-xs font-bold uppercase tracking-widest mb-2">
               <span className="h-1 w-6 bg-[#94f0df]"></span>
-              Executive Case Oversight
+              Executive Dashboard
             </div>
             <h1 className="text-3xl font-black text-white uppercase tracking-tight font-headline">
               Welcome Back, <span className="text-[#94f0df]">{user?.name || "Case Manager"}</span>
@@ -307,15 +307,6 @@ export default function DashboardPage() {
             </div>
 
             {/* Network Card */}
-            <div className="bg-primary p-6 text-white overflow-hidden relative">
-               <div className="absolute -right-4 -bottom-4 opacity-10 rotate-12"><Activity size={120} /></div>
-               <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-[#94f0df]">Operational Status</h4>
-               <p className="text-lg font-headline font-black uppercase leading-tight">Region VII Unified Network Active</p>
-               <div className="mt-6 flex items-center gap-2">
-                 <div className="h-2 w-2 rounded-full bg-[#94f0df] animate-pulse"></div>
-                 <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Live Node Synchronization</span>
-               </div>
-            </div>
           </div>
         </div>
       </main>

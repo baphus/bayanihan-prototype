@@ -1,8 +1,7 @@
 import { ClipboardList, ClipboardType, RefreshCcw, CheckCircle2 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useMemo } from 'react'
-import { type Column } from '../../components/ui/UnifiedTable'
-import { RecentTable } from '../../components/ui/RecentTable'
+import { useMemo, useState } from 'react'
+import { UnifiedTable, type Column } from '../../components/ui/UnifiedTable'
 import NotificationBell from '../../components/ui/NotificationBell'
 import AgencyFeedbacksPanel from '../../components/AgencyFeedbacksPanel'
 import { pageHeadingStyles } from './pageHeadingStyles'
@@ -44,10 +43,20 @@ export default function DashboardPage() {
   const processingCount = recentReferrals.filter((item) => item.status === 'PROCESSING' || item.status === 'FOR_COMPLIANCE').length
   const completedCount = recentReferrals.filter((item) => item.status === 'COMPLETED').length
 
+  const [search, setSearch] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const filteredReferrals = useMemo(() => {
+    if (!search) return recentReferrals
+    const lower = search.toLowerCase()
+    return recentReferrals.filter(r => r.id.toLowerCase().includes(lower) || r.clientName.toLowerCase().includes(lower))
+  }, [recentReferrals, search])
+
   const recentReferralsColumns: Column<ReferralRowData>[] = [
     {
       key: 'id',
       title: 'TRACKING ID',
+      sortable: true,
       render: (row) => (
         <button
           type="button"
@@ -61,19 +70,22 @@ export default function DashboardPage() {
     {
       key: 'clientName',
       title: 'CLIENT NAME',
+      sortable: true,
       render: (row) => <span className="text-[13px] font-bold text-slate-700">{row.clientName}</span>,
     },
     {
       key: 'service',
       title: 'SERVICE',
+      sortable: true,
       render: (row) => <span className="text-[13px] text-slate-600">{row.service}</span>,
     },
     {
       key: 'status',
       title: 'STATUS',
+      sortable: true,
       className: 'whitespace-nowrap',
       render: (row) => (
-        <span className={`inline-flex rounded-[2px] border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${getStatusBadgeClass(row.status)}`}>
+        <span className={`inline-flex items-center gap-1.5 rounded-[2px] px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide border ${getStatusBadgeClass(row.status)}`}>
           {row.status}
         </span>
       ),
@@ -81,6 +93,7 @@ export default function DashboardPage() {
     {
       key: 'received',
       title: 'DATE RECEIVED',
+      sortable: true,
       render: (row) => <span className="text-[13px] text-slate-500">{row.received}</span>,
     },
     {
@@ -91,7 +104,7 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => navigate(`/agency/referred-cases/${row.id}`)}
-          className="h-[32px] px-3 bg-[#f1f5f9] text-slate-700 hover:bg-slate-200 text-[12px] font-bold rounded-[3px] transition-colors border border-slate-300"
+          className="h-[32px] px-3 bg-white text-[#0b5384] hover:bg-slate-50 text-[12px] font-bold rounded-[3px] transition-colors border border-[#cbd5e1]"
         >
           View
         </button>
@@ -148,18 +161,25 @@ export default function DashboardPage() {
         {/* Left Column */}
         <div className="col-span-12 lg:col-span-8 space-y-4">
           {/* RECENT REFERRALS TABLE */}
-          <RecentTable
+          <UnifiedTable
             title="Recent Referrals"
-            data={recentReferrals}
+            description="A list of incoming cases referred to your agency."
+            data={filteredReferrals}
             columns={recentReferralsColumns}
             keyExtractor={(row) => row.rowId}
+            searchValue={search}
+            onSearchChange={setSearch}
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            rowsPerPage={5}
+            hidePagination={filteredReferrals.length <= 5}
           />
         </div>
 
         {/* Right Column */}
         <div className="col-span-12 lg:col-span-4">
           <div className="mb-4">
-            <AgencyFeedbacksPanel />
+            <AgencyFeedbacksPanel isConcise />
           </div>
           <section className="bg-white border border-[#d8dee8] rounded-[2px] p-4 mb-4">
             <h3 className={`${pageHeadingStyles.sectionTitle} mb-3`}>Quick Actions</h3>

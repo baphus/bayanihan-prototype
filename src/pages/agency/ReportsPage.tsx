@@ -4,6 +4,31 @@ import { UnifiedTable, type Column, type FilterChip } from '../../components/ui/
 import { pageHeadingStyles } from './pageHeadingStyles'
 import { getStatusBadgeClass } from './statusBadgeStyles'
 import { getManagedLatestUpdate, getManagedReferrals } from '../../data/caseLifecycleStore'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+} from 'chart.js'
+import { Line, Pie } from 'react-chartjs-2'
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+)
 
 type ReferredCase = {
   id: string
@@ -392,6 +417,76 @@ export default function ReportsPage() {
     return { name, count, share }
   }, [dateRangeCases])
 
+  const chartAreaLineOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { precision: 0, color: '#94a3b8' },
+        grid: { color: '#f1f5f9' },
+      },
+      x: {
+        ticks: { color: '#64748b' },
+        grid: { display: false },
+      },
+    },
+  }
+
+  const lineChartData = {
+    labels: trendData.labels,
+    datasets: [
+      {
+        label: 'Referrals',
+        data: trendData.series,
+        borderColor: '#0ea5e9',
+        backgroundColor: '#e0f2fe',
+        borderWidth: 2,
+        pointBackgroundColor: '#0ea5e9',
+        pointRadius: 3,
+        fill: true,
+        tension: 0.3,
+      },
+    ],
+  }
+
+  const pieChartData = {
+    labels: statusBreakdown.map((item) => item.label),
+    datasets: [
+      {
+        data: statusBreakdown.map((item) => item.value),
+        backgroundColor: statusBreakdown.map((item) => item.color),
+        borderWidth: 2,
+        borderColor: '#ffffff',
+      },
+    ],
+  }
+
+  const pieChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 20,
+          boxWidth: 8,
+          color: '#475569',
+          font: { size: 11, weight: 'bold' as const },
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => ` ${context.label}: ${context.raw}%`,
+        },
+      },
+    },
+  }
+
   const averageTimeInsight = useMemo(() => {
     const selectedAvg = kpiData.averageDays
     const rangeDays = Math.max(1, differenceInDays(activeFromDate, activeToDate) + 1)
@@ -618,12 +713,8 @@ export default function ReportsPage() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.05fr_2.2fr]">
         <article className="border border-[#cbd5e1] bg-white p-4">
           <h3 className={`mb-4 ${pageHeadingStyles.sectionTitle}`}>Referrals By Status</h3>
-          <div className="flex items-center justify-center">
-            <svg width="150" height="150" viewBox="0 0 144 144" aria-label="Referrals by status pie chart">
-              {pieSegments.map((segment) => (
-                <path key={segment.key} d={segment.path} fill={segment.color} />
-              ))}
-            </svg>
+          <div className="h-[250px] w-full">
+            <Pie data={pieChartData} options={pieChartOptions} />
           </div>
           <div className="mt-3 space-y-2">
             {statusBreakdown.map((item) => (
@@ -643,43 +734,9 @@ export default function ReportsPage() {
             <h3 className={pageHeadingStyles.sectionTitle}>Referrals Over Time</h3>
             <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#0b5a8c]">{trendTitle}</span>
           </div>
-          <svg width="100%" viewBox="0 0 530 220" preserveAspectRatio="none" className="h-[220px]">
-            {[0, 1, 2, 3, 4].map((idx) => (
-              <line
-                key={`grid-${idx}`}
-                x1="20"
-                x2="510"
-                y1={30 + idx * 40}
-                y2={30 + idx * 40}
-                stroke="#e2e8f0"
-                strokeWidth="1"
-              />
-            ))}
-            <path d={linePath} fill="none" stroke="#0b5a8c" strokeWidth="3" strokeLinecap="round" />
-            {trendData.series.map((value, idx) => {
-              const min = Math.min(...trendData.series)
-              const max = Math.max(...trendData.series)
-              const range = Math.max(1, max - min)
-              const x = getLinePointX(idx, trendData.series.length)
-              const y = 20 + (1 - (value - min) / range) * (220 - 40)
-
-              return <circle key={`pt-${idx}`} cx={x} cy={y} r="2.6" fill="#0b5a8c" />
-            })}
-            <g fill="#94a3b8" fontSize="8" fontWeight="700" letterSpacing="0.05em">
-              {trendData.labels.map((label, index) => {
-                const shouldRender = index % trendLabelStep === 0 || index === trendData.labels.length - 1
-                if (!shouldRender) {
-                  return null
-                }
-
-                return (
-                  <text key={`${label}-${index}`} x={getLinePointX(index, trendData.labels.length) - 12} y="214">
-                  {label}
-                </text>
-                )
-              })}
-            </g>
-          </svg>
+          <div className="h-[250px] w-full">
+            <Line data={lineChartData} options={chartAreaLineOptions} />
+          </div>
         </article>
       </section>
 
